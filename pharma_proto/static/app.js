@@ -109,10 +109,13 @@ tier.addEventListener("change", () => {
   selectedModel.textContent = modelCatalog[provider.value][tier.value];
 });
 
-document.querySelector("#generate").addEventListener("click", async () => {
+const generateButton = document.querySelector("#generate");
+generateButton.addEventListener("click", async () => {
   message.textContent = "생성 중… 조성표를 만든 뒤 LLM 해설을 작성합니다. 1~2분 걸릴 수 있습니다.";
   results.replaceChildren();
   reviewNotice.hidden = true;
+  generateButton.disabled = true;
+  generateButton.ariaBusy = "true";
   try {
     const data = await jsonRequest("/api/generate", {
       method: "POST",
@@ -125,6 +128,9 @@ document.querySelector("#generate").addEventListener("click", async () => {
     message.textContent = "완료";
   } catch (error) {
     message.textContent = error.message;
+  } finally {
+    generateButton.disabled = false;
+    generateButton.ariaBusy = "false";
   }
 });
 

@@ -243,8 +243,8 @@ def candidate_html(cand, explanation=None) -> str:
     picks = ", ".join(f"{_FUNC_KO.get(f, f)}: {_title_en(n)}" for f, n in cand.pick.items())
     badge_cls = {"pass": "ok", "warning": "warn", "unresolved": "bad"}[cand.status]
     nwarn = len(cand.gate_out["warnings"])
-    badge = {"pass": "✅ 배합 가능", "warning": f"⚠️ 조건부 후보 (주의 {nwarn}건)",
-             "unresolved": "❌ 미해결 (하드 실패)"}[cand.status]
+    badge = {"pass": "게이트 통과", "warning": f"조건부 후보 (주의 {nwarn}건)",
+             "unresolved": "미해결 (하드 실패)"}[cand.status]
 
     rows = []
     for name, function, raw_mg, raw_pct, prov, green in candidate_rows(cand):
