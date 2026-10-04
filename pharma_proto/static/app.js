@@ -10,6 +10,13 @@ const researchApp = document.querySelector("#research-app");
 const reviewNotice = document.querySelector("#review-notice");
 const selectedModel = document.querySelector("#selected-model");
 const modelCatalog = JSON.parse(document.querySelector("#model-catalog").textContent);
+const followupPanel = document.querySelector("#followup-panel");
+const followupQuestion = document.querySelector("#followup-question");
+const followupLog = document.querySelector("#followup-log");
+const followupButton = document.querySelector("#followup");
+const logoutButton = document.querySelector("#logout");
+// 서버 메모리에 있는 현재 대화의 id. 새로고침·로그아웃이면 사라진다(브라우저에 저장하지 않음).
+let conversationId = null;
 
 function populateModels() {
   const preferredTier = tier.value || "normal";
@@ -25,13 +32,28 @@ function populateModels() {
   selectedModel.textContent = modelCatalog[provider.value][tier.value];
 }
 
+function resetConversation() {
+  conversationId = null;
+  followupPanel.hidden = true;
+  followupLog.replaceChildren();
+  followupQuestion.value = "";
+}
+
 function showApiSetup() {
   researchApp.hidden = true;
   apiSetup.hidden = false;
   results.replaceChildren();
   reviewNotice.hidden = true;
+  resetConversation();
   setupMessage.textContent = "";
   apiKey.focus();
+}
+
+function appendFollowupLog(htmlText) {
+  if (!htmlText) return;
+  const entry = document.createElement("div");
+  entry.innerHTML = htmlText;
+  followupLog.append(entry);
 }
 
 function showResearchApp() {
@@ -126,7 +148,14 @@ document.querySelector("#save-key").addEventListener("click", async () => {
   }
 });
 
-document.querySelector("#change-key").addEventListener("click", showApiSetup);
+logoutButton.addEventListener("click", async () => {
+  try {
+    await jsonRequest("/api/logout", {method: "POST"});
+  } catch (error) {
+    // 서버가 응답하지 못해도 화면은 초기화한다. 키는 프로세스 종료 때 어차피 사라진다.
+  }
+  showApiSetup();
+});
 provider.addEventListener("change", populateModels);
 tier.addEventListener("change", () => {
   selectedModel.textContent = modelCatalog[provider.value][tier.value];
@@ -137,6 +166,7 @@ generateButton.addEventListener("click", async () => {
   message.textContent = "생성 중… 조성표를 만든 뒤 LLM 해설을 작성합니다. 1~2분 걸릴 수 있습니다.";
   results.replaceChildren();
   reviewNotice.hidden = true;
+  resetConversation();
   generateButton.disabled = true;
   generateButton.ariaBusy = "true";
   try {
@@ -148,12 +178,54 @@ generateButton.addEventListener("click", async () => {
     results.innerHTML = data.html;
     enableDownloads(data.downloads || []);
     reviewNotice.hidden = results.querySelector(".card") === null;
+    conversationId = data.conversation_id || null;
+    followupPanel.hidden = conversationId === null || reviewNotice.hidden;
     message.textContent = "완료";
   } catch (error) {
     message.textContent = describeError(error);
   } finally {
     generateButton.disabled = false;
     generateButton.ariaBusy = "false";
+  }
+});
+
+followupButton.addEventListener("click", async () => {
+  const text = followupQuestion.value.trim();
+  if (!text) return;
+  if (!conversationId) {
+    message.textContent = describeError(new Error("CONVERSATION-001"));
+    return;
+  }
+  message.textContent = "후속 질문 처리 중… 요청을 고치는 경우 조성표와 해설을 다시 만듭니다.";
+  followupButton.disabled = true;
+  followupButton.ariaBusy = "true";
+  try {
+    const data = await jsonRequest("/api/followup", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        provider: provider.value, tier: tier.value, conversation_id: conversationId, question: text,
+      }),
+    });
+    conversationId = data.conversation_id || conversationId;
+    if (data.action === "refine" && data.changed) {
+      results.innerHTML = data.html;
+      enableDownloads(data.downloads || []);
+      reviewNotice.hidden = results.querySelector(".card") === null;
+    }
+    appendFollowupLog(data.answer_html || "");
+    followupQuestion.value = "";
+    if (data.action === "refine") {
+      message.textContent = data.changed ? "요청을 수정해 다시 생성했습니다." : "변경할 내용이 없어 기존 결과를 유지합니다.";
+    } else {
+      message.textContent = "답변을 추가했습니다.";
+    }
+  } catch (error) {
+    message.textContent = describeError(error);
+    if (error.message === "CONVERSATION-001") resetConversation();
+  } finally {
+    followupButton.disabled = false;
+    followupButton.ariaBusy = "false";
   }
 });
 

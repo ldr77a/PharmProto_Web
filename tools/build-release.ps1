@@ -73,6 +73,7 @@ try {
     $runtimePackageFiles = @(
         "pharma_proto\__init__.py",
         "pharma_proto\app.py",
+        "pharma_proto\conversation.py",
         "pharma_proto\diagnostics.py",
         "pharma_proto\errors.py",
         "pharma_proto\excel_export.py",

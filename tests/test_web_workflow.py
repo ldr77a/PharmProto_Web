@@ -113,6 +113,58 @@ class _ParsedRequestLLMService:
         return self._parsed.to_domain()
 
 
+class _ConversationalFakeLLMService:
+    """parse_request / explain / followup 를 모두 갖춘 가짜 — 후속 질문 경로용."""
+
+    def __init__(self, parsed, *, explanation=None, reply=None) -> None:
+        self._parsed = parsed
+        self._explanation = explanation
+        self._reply = reply
+        self.followup_payloads: list[dict] = []
+        self.explain_calls = 0
+
+    def parse_request(self, provider: str, tier: str, api_key: str, question: str):
+        return self._parsed
+
+    def explain(self, provider: str, tier: str, api_key: str, payload: dict):
+        self.explain_calls += 1
+        if self._explanation is None:
+            raise LLMFailure("LLM-RESPONSE-001", False)
+        return self._explanation
+
+    def followup(self, provider: str, tier: str, api_key: str, payload: dict):
+        self.followup_payloads.append(payload)
+        if self._reply is None:
+            raise LLMFailure("LLM-RESPONSE-001", False)
+        return self._reply
+
+
+def _parsed_request(**overrides):
+    from pharma_proto.llm.schema import ParsedRequest
+
+    base = {"apis": [{"name": "acetaminophen", "dose_mg": 500}], "n_candidates": 2}
+    base.update(overrides)
+    return ParsedRequest.model_validate(base)
+
+
+def _followup_reply(**fields):
+    from pharma_proto.llm.schema import FollowUpResponse
+
+    return FollowUpResponse.model_validate(fields)
+
+
+def _count_generations(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    real = app_module.run_generation
+    calls: list[int] = []
+
+    def counting(spec, *, repository, offline):
+        calls.append(1)
+        return real(spec, repository=repository, offline=offline)
+
+    monkeypatch.setattr(app_module, "run_generation", counting)
+    return calls
+
+
 @pytest.fixture
 def app_factory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
@@ -182,9 +234,12 @@ def test_first_load_only_exposes_api_setup(app_factory) -> None:
     assert "hidden" not in probe.attrs("api-setup")
     assert "hidden" in probe.attrs("research-app")
     assert "hidden" in probe.attrs("review-notice")
+    assert "hidden" in probe.attrs("followup-panel")
     assert probe.text("api-cost-notice") == "외부 AI API 호출은 과금 대상입니다."
+    assert "파일에 저장하지 않습니다" in probe.text("key-notice")
     assert "연구 검토용 시제품입니다." not in probe.text("api-setup")
-    assert "API 설정 변경" in probe.text("research-app")
+    assert "로그아웃 (API 키 삭제)" in probe.text("research-app")
+    assert "API 설정 변경" not in probe.text("research-app")
 
     catalog = json.loads(probe.text("model-catalog"))
     assert catalog == {
@@ -322,6 +377,139 @@ def test_generate_echoes_parsed_request_and_user_amounts(app_factory) -> None:
     assert "4.00</td><td class='ev '>사용자 지정</td>" in html       # 표의 % 와 근거 라벨
     assert "총중량 700mg" in html
     assert "미반영 분량" not in html
+
+
+def test_followup_refine_regenerates_from_the_revised_request(app_factory, monkeypatch) -> None:
+    """피드백 1번: '후보 1개, 총중량 650' 같은 수정 요청은 새 요청으로 다시 생성한다(실제 스냅샷)."""
+    parsed = _parsed_request()
+    reply = _followup_reply(action="refine", request=_parsed_request(n_candidates=1, target_total_mg=650),
+                            note="후보 1개, 총중량 650 mg 으로.")
+    service = _ConversationalFakeLLMService(parsed, explanation=_explanation(), reply=reply)
+    calls = _count_generations(monkeypatch)
+    client = app_factory(llm_service=service).test_client()
+    assert client.post("/api/key", json={"provider": "claude", "api_key": "test-key"}).status_code == 200
+
+    first = client.post("/api/generate", json={"provider": "claude", "tier": "normal",
+                                               "question": "아세트아미노펜 500 mg 정제 후보 2개"})
+    assert first.status_code == 200
+    conversation_id = first.get_json()["conversation_id"]
+    assert len(conversation_id) == 32 and first.get_json()["html"].count("조성 후보 ") == 2
+
+    second = client.post("/api/followup", json={"provider": "claude", "tier": "normal",
+                                                "conversation_id": conversation_id,
+                                                "question": "후보 1개, 총중량 650 mg 으로"})
+
+    assert second.status_code == 200
+    data = second.get_json()
+    assert data["action"] == "refine" and data["changed"] is True
+    assert data["conversation_id"] == conversation_id
+    assert data["html"].count("조성 후보 ") == 1 and "총중량 650mg" in data["html"]
+    assert len(data["downloads"]) == 1
+    assert "후보 수: 2 → 1" in data["answer_html"] and "총중량: 자동 → 650 mg" in data["answer_html"]
+    assert "후보 1개, 총중량 650 mg 으로." in data["answer_html"]
+    assert calls == [1, 1] and service.explain_calls == 2
+    payload = service.followup_payloads[0]
+    assert payload["previous_request"]["apis"][0]["name"] == "acetaminophen"
+    assert payload["question"] == "후보 1개, 총중량 650 mg 으로"
+    assert payload["turns"][0]["kind"] == "question"
+    assert [c["candidate_idx"] for c in payload["result"]["candidates"]] == [1, 2]
+    assert payload["previous_explanation_summaries"][0]["summary"] == "단순 직타 조성."
+
+
+def test_followup_answer_renders_basis_badges_without_regenerating(app_factory, monkeypatch) -> None:
+    parsed = _parsed_request(n_candidates=1)
+    reply = _followup_reply(action="answer", request=parsed, answer=[
+        {"text": "희석제는 역할별 범위 안이다.", "basis": "evidence", "refs": ["KG 역할별 범위 n=2034"]},
+        {"text": "흡습성은 실험으로 확인한다.", "basis": "general"},
+    ])
+    service = _ConversationalFakeLLMService(parsed, reply=reply)
+    calls = _count_generations(monkeypatch)
+    client = app_factory(llm_service=service).test_client()
+    client.post("/api/key", json={"provider": "openai", "api_key": "test-key"})
+    first = client.post("/api/generate", json={"provider": "openai", "tier": "normal", "question": "q"}).get_json()
+
+    second = client.post("/api/followup", json={"provider": "openai", "tier": "normal",
+                                                "conversation_id": first["conversation_id"],
+                                                "question": "왜 이 희석제를 골랐어?"})
+
+    assert second.status_code == 200
+    data = second.get_json()
+    assert data["action"] == "answer" and "changed" not in data
+    assert data["html"] == first["html"]
+    assert "class='basis ev'" in data["answer_html"] and "class='basis gen'" in data["answer_html"]
+    assert "왜 이 희석제를 골랐어?" in data["answer_html"] and "KG 역할별 범위 n=2034" in data["answer_html"]
+    assert calls == [1]
+
+
+def test_followup_refine_without_changes_keeps_the_result(app_factory, monkeypatch) -> None:
+    parsed = _parsed_request(n_candidates=1)
+    service = _ConversationalFakeLLMService(parsed, reply=_followup_reply(action="refine", request=parsed))
+    calls = _count_generations(monkeypatch)
+    client = app_factory(llm_service=service).test_client()
+    client.post("/api/key", json={"provider": "openai", "api_key": "test-key"})
+    first = client.post("/api/generate", json={"provider": "openai", "tier": "normal", "question": "q"}).get_json()
+
+    second = client.post("/api/followup", json={"provider": "openai", "tier": "normal",
+                                                "conversation_id": first["conversation_id"],
+                                                "question": "그대로 해 줘"}).get_json()
+
+    assert second["action"] == "refine" and second["changed"] is False
+    assert second["html"] == first["html"]
+    assert "변경할 내용이 없어" in second["answer_html"]
+    assert calls == [1]
+
+
+def test_followup_rejects_unknown_conversation_bad_ids_and_extra_fields(app_factory) -> None:
+    service = _ConversationalFakeLLMService(_parsed_request(), reply=None)
+    client = app_factory(llm_service=service).test_client()
+    client.post("/api/key", json={"provider": "openai", "api_key": "test-key"})
+    base = {"provider": "openai", "tier": "normal", "question": "왜?"}
+
+    unknown = client.post("/api/followup", json={**base, "conversation_id": "f" * 32})
+    bad_id = client.post("/api/followup", json={**base, "conversation_id": "../etc"})
+    extra = client.post("/api/followup", json={**base, "conversation_id": "f" * 32, "spec": {}})
+
+    assert (unknown.status_code, unknown.get_json()) == (404, {"error": "CONVERSATION-001"})
+    assert (bad_id.status_code, bad_id.get_json()) == (400, {"error": "REQUEST-001"})
+    assert (extra.status_code, extra.get_json()) == (400, {"error": "REQUEST-001"})
+    assert service.followup_payloads == []
+
+
+def test_followup_unsupported_dosage_form_keeps_previous_result(app_factory) -> None:
+    parsed = _parsed_request(n_candidates=1)
+    reply = _followup_reply(action="refine", request=_parsed_request(n_candidates=1, dosage_form="syrup"))
+    service = _ConversationalFakeLLMService(parsed, reply=reply)
+    client = app_factory(llm_service=service).test_client()
+    client.post("/api/key", json={"provider": "openai", "api_key": "test-key"})
+    first = client.post("/api/generate", json={"provider": "openai", "tier": "normal", "question": "q"}).get_json()
+
+    failed = client.post("/api/followup", json={"provider": "openai", "tier": "normal",
+                                                "conversation_id": first["conversation_id"],
+                                                "question": "시럽으로"})
+
+    assert (failed.status_code, failed.get_json()) == (400, {"error": "REQUEST-FORM-001"})
+    service._reply = _followup_reply(action="answer", request=parsed, answer=[{"text": "그대로.", "basis": "general"}])
+    again = client.post("/api/followup", json={"provider": "openai", "tier": "normal",
+                                               "conversation_id": first["conversation_id"],
+                                               "question": "지금 표는?"}).get_json()
+    assert again["html"] == first["html"]                      # 실패한 수정은 대화를 바꾸지 않았다
+
+
+def test_logout_clears_keys_and_conversations(app_factory) -> None:
+    service = _ConversationalFakeLLMService(_parsed_request(n_candidates=1), reply=None)
+    client = app_factory(llm_service=service).test_client()
+    client.post("/api/key", json={"provider": "openai", "api_key": "test-key"})
+    first = client.post("/api/generate", json={"provider": "openai", "tier": "normal", "question": "q"}).get_json()
+    assert client.get("/health").get_json()["providers"]["openai"] is True
+
+    logout = client.post("/api/logout")
+
+    assert logout.status_code == 200 and logout.get_json() == {"ok": True}
+    assert client.get("/health").get_json()["providers"]["openai"] is False
+    body = {"provider": "openai", "tier": "normal", "conversation_id": first["conversation_id"], "question": "왜?"}
+    assert client.post("/api/followup", json=body).get_json() == {"error": "LLM-KEY-001"}
+    client.post("/api/key", json={"provider": "openai", "api_key": "test-key"})
+    assert client.post("/api/followup", json=body).get_json() == {"error": "CONVERSATION-001"}
 
 
 def test_generate_logs_safe_provider_diagnostics(app_factory, tmp_path: Path) -> None:

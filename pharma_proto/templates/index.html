@@ -31,6 +31,7 @@
         <label>이번 실행의 API 키
         <input id="api-key" type="password" autocomplete="off" spellcheck="false">
         </label>
+        <p id="key-notice" class="notice key-notice">API 키는 이 프로그램이 켜져 있는 동안 메모리에만 두고 파일에 저장하지 않습니다. 화면의 로그아웃을 누르면 바로 지워집니다.</p>
         <button id="save-key" type="button">확인</button>
       </div>
       <div id="setup-message" class="message" role="status"></div>
@@ -75,7 +76,7 @@
             <h1>신약 배합 생성기</h1>
             <div class="model-summary">
               <span>사용 모델 <strong id="selected-model">{{ model_catalog.openai.normal }}</strong></span>
-              <button id="change-key" class="secondary compact" type="button">API 설정 변경</button>
+              <button id="logout" class="secondary compact" type="button">로그아웃 (API 키 삭제)</button>
             </div>
           </header>
           <section class="status" aria-live="polite">
@@ -90,6 +91,15 @@
           <div id="message" class="message" role="status"></div>
           <section id="results"></section>
           <p id="review-notice" class="notice review-notice" hidden>연구 검토용 시제품입니다. 생성 결과는 반드시 사람이 검토해야 합니다.</p>
+          <section id="followup-panel" class="controls followup-panel" hidden aria-labelledby="followup-title">
+            <h2 id="followup-title">이 결과에 이어서 질문</h2>
+            <p class="notice">조성을 바꾸라고 하면(예: "총중량 650 mg 으로") 요청을 고쳐 다시 생성합니다. 결과를 물으면(예: "왜 MCC 를 골랐어?") 현재 표의 근거로 답하고, 문장마다 근거인지 일반 지식인지 표시합니다.</p>
+            <div id="followup-log" class="followup-log" aria-live="polite"></div>
+            <label class="wide">후속 질문
+              <textarea id="followup-question" maxlength="4000" rows="3" placeholder="총중량을 650 mg 으로 바꿔 줘 / 왜 이 결합제를 골랐어?"></textarea>
+            </label>
+            <button id="followup" type="button">보내기</button>
+          </section>
         </div>
       </div>
     </section>

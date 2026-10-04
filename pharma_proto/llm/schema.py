@@ -153,7 +153,107 @@ class FormulationExplanation(BaseModel):
         return next((item for item in self.candidates if item.candidate_idx == idx), None)
 
 
+# --- 후속 질문(3차 호출) ---------------------------------------------------------------
+# LLM 은 의도만 분류한다: 요청을 고쳐 다시 만들기(refine) 또는 현재 결과에 대해 답하기(answer).
+# request 는 두 경우 모두 채운다(answer 면 이전 요청을 그대로 복사). Gemini 구조화 출력이
+# union/nullable 을 못 쓰고, 무엇이 바뀌었는지는 서버가 결정적으로 계산할 수 있기 때문이다.
+
+
+def _normalize_action(value: str) -> str:
+    text = (value or "").strip().lower()
+    return "refine" if text.startswith("ref") or text in ("수정", "재생성", "regenerate") else "answer"
+
+
+class FollowUpResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    action: str = "answer"
+    request: ParsedRequest
+    answer: list[ExplanationItem] = Field(default_factory=list, max_length=20)
+    note: Annotated[str, StringConstraints(max_length=400)] = ""
+
+    @model_validator(mode="after")
+    def _normalize(self) -> FollowUpResponse:
+        self.action = _normalize_action(self.action)
+        if self.action == "answer" and not self.answer:
+            raise ValueError("answer needs at least one sentence")
+        return self
+
+
+_REQUEST_FIELDS_KO = (
+    ("dosage_form", "제형"), ("process", "공정"), ("release_profile", "방출"),
+    ("n_candidates", "후보 수"), ("target_total_mg", "총중량"),
+)
+_ROLE_FIELDS_KO = (
+    ("binder", "결합제"), ("disintegrant", "붕해제"), ("diluent", "희석제"), ("lubricant", "활택제"),
+)
+
+
+def _fmt_value(value: object) -> str:
+    if value is None or value == "" or value == []:
+        return "없음"
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value)
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _fmt_total(value: float | None) -> str:
+    return "자동" if value is None else f"{_fmt_value(value)} mg"
+
+
+def _fmt_amount(item: ParsedAmount) -> str:
+    return f"{item.ingredient} " + (f"{item.pct:g}%" if item.pct is not None else f"{item.mg:g} mg")
+
+
+def request_changes(old: ParsedRequest, new: ParsedRequest) -> list[str]:
+    """두 요청의 필드별 차이를 한국어 한 줄씩. 비어 있으면 바뀐 것이 없다(재생성하지 않는다)."""
+    changes: list[str] = []
+    old_apis = {a.name.casefold(): a for a in old.apis}
+    new_apis = {a.name.casefold(): a for a in new.apis}
+    for key in sorted(set(old_apis) | set(new_apis)):
+        before, after = old_apis.get(key), new_apis.get(key)
+        if before is None:
+            changes.append(f"주성분 추가: {after.name}" + (f" {after.dose_mg:g} mg" if after.dose_mg else ""))
+        elif after is None:
+            changes.append(f"주성분 제거: {before.name}")
+        elif before.dose_mg != after.dose_mg:
+            changes.append(f"{after.name} 용량: {_fmt_value(before.dose_mg)} → {_fmt_value(after.dose_mg)} mg")
+    for field_name, label in _REQUEST_FIELDS_KO:
+        before, after = getattr(old, field_name), getattr(new, field_name)
+        if isinstance(before, str) and isinstance(after, str):
+            if before.strip().casefold() == after.strip().casefold():
+                continue
+        elif before == after:
+            continue
+        if field_name == "target_total_mg":
+            changes.append(f"{label}: {_fmt_total(before)} → {_fmt_total(after)}")
+        else:
+            changes.append(f"{label}: {_fmt_value(before)} → {_fmt_value(after)}")
+    roles_old = {label: list(getattr(old, name)) for name, label in _ROLE_FIELDS_KO}
+    roles_new = {label: list(getattr(new, name)) for name, label in _ROLE_FIELDS_KO}
+    roles_old.update({item.role: list(item.ingredients) for item in old.additional_roles})
+    roles_new.update({item.role: list(item.ingredients) for item in new.additional_roles})
+    for role in sorted(set(roles_old) | set(roles_new)):
+        before, after = roles_old.get(role, []), roles_new.get(role, [])
+        if [v.casefold() for v in before] != [v.casefold() for v in after]:
+            changes.append(f"{role}: {_fmt_value(before)} → {_fmt_value(after)}")
+    old_amounts = {a.ingredient.casefold(): a for a in old.amounts}
+    new_amounts = {a.ingredient.casefold(): a for a in new.amounts}
+    for key in sorted(set(old_amounts) | set(new_amounts)):
+        before, after = old_amounts.get(key), new_amounts.get(key)
+        if before is None:
+            changes.append(f"분량 추가: {_fmt_amount(after)}")
+        elif after is None:
+            changes.append(f"분량 제거: {before.ingredient}")
+        elif (before.mg, before.pct) != (after.mg, after.pct):
+            changes.append(f"분량 변경: {_fmt_amount(before)} → {_fmt_amount(after)}")
+    return changes
+
+
 __all__ = [
-    "CandidateExplanation", "ExplanationItem", "FormulationExplanation", "IngredientNote",
-    "ParsedAPI", "ParsedAmount", "ParsedRequest", "ParsedRoleChoice",
+    "CandidateExplanation", "ExplanationItem", "FollowUpResponse", "FormulationExplanation",
+    "IngredientNote", "ParsedAPI", "ParsedAmount", "ParsedRequest", "ParsedRoleChoice",
+    "request_changes",
 ]

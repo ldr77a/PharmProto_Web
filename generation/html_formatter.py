@@ -230,6 +230,35 @@ def explanation_html(expl) -> str:
     )
 
 
+def followup_answer_html(question: str, items) -> str:
+    """후속 질의응답 카드. 문장마다 근거/일반지식 배지(해설층과 같은 규칙, 숫자는 표의 것)."""
+    lis = "".join(
+        f"<li>{_basis_badge(item.basis)} {html.escape(item.text)} {_refs_html(item.refs)}</li>"
+        for item in items
+    )
+    return (
+        "<div class='card followup'>"
+        f"<p class='followup-q'><span class='followup-label'>질문</span> {html.escape(question)}</p>"
+        f"<ul class='followup-a'>{lis}</ul></div>"
+    )
+
+
+def followup_turn_html(question: str, changes, note: str = "") -> str:
+    """요청을 고쳐 다시 생성했을 때의 기록 카드. 변경 목록은 서버가 두 요청을 비교해 만든다."""
+    if changes:
+        head = "요청을 수정해 다시 생성했습니다."
+        body = "<ul class='followup-a'>" + "".join(f"<li>{html.escape(c)}</li>" for c in changes) + "</ul>"
+    else:
+        head = "변경할 내용이 없어 기존 결과를 유지합니다."
+        body = ""
+    note_html = f"<p class='followup-note'>{html.escape(note)}</p>" if note else ""
+    return (
+        "<div class='card followup refine'>"
+        f"<p class='followup-q'><span class='followup-label'>질문</span> {html.escape(question)}</p>"
+        f"<p class='followup-head'>{head}</p>{body}{note_html}</div>"
+    )
+
+
 def explanation_header_html(explanation) -> str:
     if explanation is None:
         return ""

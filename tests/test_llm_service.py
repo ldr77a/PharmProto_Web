@@ -58,10 +58,24 @@ class _RecordingClaudeMessages:
                 "release_profile": "immediate release",
                 "n_candidates": 3,
             }
+        elif output_format.__name__ == "FollowUpResponse":
+            payload = _FOLLOWUP_PAYLOAD
         else:
             payload = _EXPLANATION_PAYLOAD
         return SimpleNamespace(parsed_output=output_format.model_validate(payload), stop_reason="end_turn")
 
+
+_FOLLOWUP_PAYLOAD = {
+    "action": "REFINE",
+    "request": {
+        "apis": [{"name": "Acetaminophen", "dose_mg": 500}],
+        "dosage_form": "tablet",
+        "n_candidates": 1,
+        "target_total_mg": 650,
+    },
+    "answer": [],
+    "note": "후보 1개, 총중량 650 mg 으로 바꿨다.",
+}
 
 _EXPLANATION_PAYLOAD = {
     "api_profile": [{"text": "2차 아민을 가진 수용성 염.", "basis": "general", "refs": []}],
@@ -270,3 +284,73 @@ def test_explain_rejects_empty_payload() -> None:
 
     with pytest.raises(ValueError):
         service.explain("claude", "normal", "test-key", {"candidates": []})
+
+
+def _followup_payload() -> dict:
+    return {
+        "previous_request": {"apis": [{"name": "Acetaminophen", "dose_mg": 500}], "n_candidates": 3},
+        "question": "후보 1개, 총중량 650 mg 으로",
+        "turns": [],
+        "result": _payload(),
+    }
+
+
+def test_claude_followup_normalizes_action_and_returns_full_request() -> None:
+    client = _RecordingClaudeClient()
+    service = LLMService(
+        client_factories={"claude": lambda *args, **kwargs: client},
+        policy=RetryPolicy(max_attempts=1),
+    )
+
+    reply = service.followup("claude", "normal", "test-key", _followup_payload())
+
+    assert client.messages.output_format.__name__ == "FollowUpResponse"
+    assert "tool_choice" not in client.messages.kwargs
+    assert reply.action == "refine"
+    assert reply.request.n_candidates == 1 and reply.request.target_total_mg == 650
+    assert reply.note.startswith("후보 1개")
+
+
+class _RecordingGeminiFollowupModels(_RecordingGeminiModels):
+    def generate_content(self, *, model, contents, config):
+        from google.genai import _transformers
+
+        self.config = config
+        self.submitted_schema = deepcopy(config.response_schema)
+        _transformers.t_schema(None, config.response_schema)
+        return SimpleNamespace(text=json.dumps(_FOLLOWUP_PAYLOAD, ensure_ascii=False))
+
+
+def test_gemini_followup_schema_only_uses_portable_fields() -> None:
+    client = _RecordingGeminiClient()
+    client.models = _RecordingGeminiFollowupModels()
+    service = LLMService(
+        client_factories={"gemini": lambda *args, **kwargs: client},
+        policy=RetryPolicy(max_attempts=1),
+    )
+
+    reply = service.followup("gemini", "normal", "test-key", _followup_payload())
+
+    assert reply.action == "refine" and reply.request.n_candidates == 1
+    schema = client.models.submitted_schema
+    assert set(schema["properties"]) == {"action", "request", "answer", "note"}
+    assert "amounts" in schema["properties"]["request"]["properties"]
+    allowed = {"type", "properties", "required", "items"}
+    pending = [schema]
+    while pending:
+        node = pending.pop()
+        assert isinstance(node, dict) and set(node) <= allowed
+        pending.extend(node.get("properties", {}).values())
+        if "items" in node:
+            pending.append(node["items"])
+
+
+def test_followup_rejects_payload_without_question_or_previous_request() -> None:
+    import pytest
+
+    service = LLMService(policy=RetryPolicy(max_attempts=1))
+
+    with pytest.raises(ValueError):
+        service.followup("claude", "normal", "test-key", {"previous_request": {"apis": []}})
+    with pytest.raises(ValueError):
+        service.followup("claude", "normal", "test-key", {"question": "왜?"})

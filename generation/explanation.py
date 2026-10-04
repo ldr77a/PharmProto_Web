@@ -116,4 +116,36 @@ def build_explanation_payload(spec, candidates, repository=None) -> dict[str, An
     }
 
 
-__all__ = ["build_explanation_payload"]
+def build_followup_payload(
+    *,
+    previous_request: dict[str, Any],
+    question: str,
+    spec,
+    candidates,
+    repository=None,
+    explanation=None,
+    turns=(),
+) -> dict[str, Any]:
+    """후속 질문 입력 — 이전 요청 JSON, 현재 결과(해설 payload 와 같은 꼴), 최근 대화, 새 메시지.
+
+    해설 본문 전체 대신 후보별 summary 만 넣어 크기를 묶는다.
+    """
+    summaries = []
+    if explanation is not None:
+        summaries = [
+            {"candidate_idx": item.candidate_idx, "summary": _clip(item.summary, 600)}
+            for item in getattr(explanation, "candidates", []) or []
+        ]
+    return {
+        "previous_request": previous_request,
+        "question": _clip(question, 4000),
+        "turns": [
+            {"role": turn.get("role"), "kind": turn.get("kind"), "text": _clip(turn.get("text"), 600)}
+            for turn in list(turns)[-6:]
+        ],
+        "result": build_explanation_payload(spec, candidates, repository),
+        "previous_explanation_summaries": summaries,
+    }
+
+
+__all__ = ["build_explanation_payload", "build_followup_payload"]

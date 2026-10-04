@@ -38,7 +38,7 @@ function fakeElement(initial = {}) {
   }, initial);
 }
 
-function browserHarness({generatePayload} = {}) {
+function browserHarness({generatePayload, followupPayloads = []} = {}) {
   const eventLog = [];
   const provider = fakeElement({value: "openai"});
   const tier = fakeElement({value: "normal"});
@@ -69,7 +69,11 @@ function browserHarness({generatePayload} = {}) {
     }),
     "#health": fakeElement(),
     "#save-key": fakeElement(),
-    "#change-key": fakeElement(),
+    "#logout": fakeElement(),
+    "#followup-panel": fakeElement({hidden: true}),
+    "#followup-question": fakeElement(),
+    "#followup-log": fakeElement(),
+    "#followup": fakeElement(),
     "#generate": fakeElement(),
   };
 
@@ -144,7 +148,11 @@ function browserHarness({generatePayload} = {}) {
         }
       : url === "/api/generate"
         ? generatePayload
-        : {provider: "openai", configured: true};
+        : url === "/api/followup"
+          ? followupPayloads.shift()
+          : url === "/api/logout"
+            ? {ok: true}
+            : {provider: "openai", configured: true};
     return {ok: true, async json() { return payload; }};
   }
 
@@ -187,13 +195,15 @@ test("API 확인 후 선택한 전체 모델명과 연구 화면을 표시한다
   assert.equal(harness.elements["#api-key"].value, "");
 });
 
-test("API 설정을 변경하면 이전 모델의 결과를 제거한다", async () => {
+test("로그아웃하면 서버의 키를 지우고 이전 결과를 제거한다", async () => {
   const harness = browserHarness();
   harness.results.innerHTML = '<div class="card">이전 결과</div>';
   harness.elements["#review-notice"].hidden = false;
 
-  await harness.elements["#change-key"].dispatch("click");
+  await harness.elements["#logout"].dispatch("click");
 
+  const logoutCall = harness.fetchCalls.find(([url]) => url === "/api/logout");
+  assert.equal(logoutCall[1].method, "POST");
   assert.equal(harness.results.innerHTML, "");
   assert.equal(harness.elements["#review-notice"].hidden, true);
   assert.equal(harness.elements["#research-app"].hidden, true);
@@ -224,4 +234,41 @@ test("생성된 후보 3개의 Excel 버튼을 각각 올바른 파일에 연결
     [1, 2, 3].map((index) => ["click", `조성_후보_${index}.xlsx`, true]),
   );
   assert.equal(harness.eventLog.filter(([event]) => event === "revoke").length, 3);
+});
+
+test("후속 질문: refine 이면 결과를 교체하고 answer 면 로그에만 덧붙인다", async () => {
+  const card = (label) => `<div class="card"><button class="download-xlsx" data-candidate-index="1" disabled></button>${label}</div>`;
+  const downloads = [{candidate_idx: 1, filename: "조성_후보_1.xlsx", content_base64: "WA=="}];
+  const conversationId = "a".repeat(32);
+  const harness = browserHarness({
+    generatePayload: {html: card("처음"), downloads, conversation_id: conversationId},
+    followupPayloads: [
+      {conversation_id: conversationId, action: "refine", changed: true, html: card("수정"), downloads,
+       answer_html: "<div class='card followup'>후보 수: 3 → 1</div>"},
+      {conversation_id: conversationId, action: "answer", html: card("수정"), downloads,
+       answer_html: "<div class='card followup'>근거</div>"},
+    ],
+  });
+
+  await harness.elements["#generate"].dispatch("click");
+  assert.equal(harness.elements["#followup-panel"].hidden, false);
+
+  harness.elements["#followup-question"].value = "후보 1개로";
+  await harness.elements["#followup"].dispatch("click");
+  const [, refineOptions] = harness.fetchCalls.find(([url]) => url === "/api/followup");
+  assert.deepEqual(JSON.parse(refineOptions.body), {
+    provider: "openai", tier: "normal", conversation_id: conversationId, question: "후보 1개로",
+  });
+  assert.ok(harness.results.innerHTML.includes("수정"));
+  assert.equal(harness.elements["#followup-log"].children.length, 1);
+  assert.equal(harness.elements["#followup-question"].value, "");
+
+  harness.elements["#followup-question"].value = "왜 이 결합제?";
+  await harness.elements["#followup"].dispatch("click");
+  assert.equal(harness.elements["#followup-log"].children.length, 2);
+  assert.ok(harness.results.innerHTML.includes("수정"));
+
+  await harness.elements["#logout"].dispatch("click");
+  assert.equal(harness.elements["#followup-panel"].hidden, true);
+  assert.equal(harness.elements["#followup-log"].children.length, 0);
 });

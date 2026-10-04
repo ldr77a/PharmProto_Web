@@ -6,20 +6,26 @@ import base64
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from flask import Flask, jsonify, render_template, request
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 from werkzeug.exceptions import HTTPException
 
-from generation.explanation import build_explanation_payload
+from generation.explanation import build_explanation_payload, build_followup_payload
 from generation.generation_loop import run_generation
-from generation.html_formatter import results_html
+from generation.html_formatter import (
+    followup_answer_html,
+    followup_turn_html,
+    results_html,
+)
 from generation.oral_solid_profiles import UnsupportedDosageForm
 from pharma_proto import __version__
+from pharma_proto.conversation import ConversationStore
 from pharma_proto.diagnostics import SafeDiagnostics, configure_safe_logging
 from pharma_proto.errors import (
     APP_START_ERROR,
+    CONVERSATION_ERROR,
     LLM_KEY_ERROR,
     REQUEST_ERROR,
     REQUEST_FORM_ERROR,
@@ -30,6 +36,7 @@ from pharma_proto.knowledge.sqlite_repository import SQLiteKnowledgeRepository
 from pharma_proto.llm.catalog import MODEL_CATALOG, model_for
 from pharma_proto.llm.memory_keys import MemoryKeyStore
 from pharma_proto.llm.resilience import LLMFailure
+from pharma_proto.llm.schema import request_changes
 from pharma_proto.llm.service import LLMService
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +54,15 @@ class _GenerateRequest(BaseModel):
 
     provider: Literal["openai", "gemini", "claude"]
     tier: Literal["cheap", "normal", "good"] = "normal"
+    question: str = Field(min_length=1, max_length=4000)
+
+
+class _FollowUpRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["openai", "gemini", "claude"]
+    tier: Literal["cheap", "normal", "good"] = "normal"
+    conversation_id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
     question: str = Field(min_length=1, max_length=4000)
 
 
@@ -71,6 +87,9 @@ def shutdown_app_resources(app: Flask) -> None:
     key_store = app.extensions.get("key_store")
     if key_store is not None:
         key_store.clear()
+    conversations = app.extensions.get("conversation_store")
+    if conversations is not None:
+        conversations.clear()
     diagnostics = app.extensions.get("diagnostics")
     if diagnostics is not None:
         diagnostics.close()
@@ -98,12 +117,14 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
         diagnostics.close()
         raise
 
+    conversations = ConversationStore()   # 후속 질문용 대화 상태 — 메모리에만, 로그아웃·종료 때 비운다
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config.update(TRUSTED_HOSTS=["127.0.0.1", "localhost"])
     app.extensions["knowledge_repository"] = repository
     app.extensions["key_store"] = key_store
     app.extensions["llm_service"] = llm_service
     app.extensions["diagnostics"] = diagnostics
+    app.extensions["conversation_store"] = conversations
 
     @app.after_request
     def security_headers(response):
@@ -221,6 +242,21 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             for candidate in candidates
         ]
 
+    def _render(provider: str, tier: str, api_key: str, model: str, spec) -> dict[str, Any]:
+        """생성 → 해설 → HTML·엑셀. generate 와 followup(refine)·resume 가 같은 경로를 탄다."""
+        candidates = _generate_candidates(spec, provider=provider, model=model)
+        explanation, explanation_error = _explain_or_none(
+            provider, tier, api_key, model, spec, candidates
+        )
+        return {
+            "spec": spec,
+            "candidates": candidates,
+            "explanation": explanation,
+            "explanation_error": explanation_error,
+            "html": results_html(spec, candidates, explanation, explanation_error),
+            "downloads": _downloads(candidates),
+        }
+
     @app.post("/api/generate")
     def generate():
         body = _parse_body(_GenerateRequest)
@@ -228,23 +264,101 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
         if api_key is None:
             raise AppError(LLM_KEY_ERROR, 400)
         model = model_for(body.provider, body.tier)
+        # 스키마 객체(ParsedRequest)를 돌려주는 서비스면 그것을 보관한다 — 후속 질문이 이 요청을 고쳐 쓴다.
+        parse_request = getattr(llm_service, "parse_request", None)
         try:
-            spec = llm_service.parse(
-                body.provider,
-                body.tier,
-                api_key,
-                body.question,
-            )
+            if callable(parse_request):
+                parsed = parse_request(body.provider, body.tier, api_key, body.question)
+                spec = parsed.to_domain()
+            else:
+                parsed = None
+                spec = llm_service.parse(body.provider, body.tier, api_key, body.question)
         except LLMFailure as failure:
             return _llm_failure(failure, body.provider, model)
-        candidates = _generate_candidates(spec, provider=body.provider, model=model)
-        explanation, explanation_error = _explain_or_none(
-            body.provider, body.tier, api_key, model, spec, candidates
+        rendered = _render(body.provider, body.tier, api_key, model, spec)
+        conversation = conversations.create(
+            provider=body.provider,
+            tier=body.tier,
+            question=body.question,
+            parsed_request=parsed,
+            **rendered,
         )
+        conversation.add_turn("user", "question", body.question)
         return jsonify(
-            html=results_html(spec, candidates, explanation, explanation_error),
-            downloads=_downloads(candidates),
+            html=rendered["html"],
+            downloads=rendered["downloads"],
+            conversation_id=conversation.conversation_id,
         )
+
+    @app.post("/api/followup")
+    def followup():
+        body = _parse_body(_FollowUpRequest)
+        api_key = key_store.get(body.provider)
+        if api_key is None:
+            raise AppError(LLM_KEY_ERROR, 400)
+        conversation = conversations.get(body.conversation_id)
+        if conversation is None or conversation.parsed_request is None:
+            raise AppError(CONVERSATION_ERROR, 404)
+        followup_call = getattr(llm_service, "followup", None)
+        if not callable(followup_call):
+            raise AppError(REQUEST_ERROR, 400)
+        model = model_for(body.provider, body.tier)
+        payload = build_followup_payload(
+            previous_request=conversation.parsed_request.model_dump(mode="json"),
+            question=body.question,
+            spec=conversation.spec,
+            candidates=conversation.candidates,
+            repository=repository,
+            explanation=conversation.explanation,
+            turns=conversation.turns,
+        )
+        try:
+            reply = followup_call(body.provider, body.tier, api_key, payload)
+        except LLMFailure as failure:
+            return _llm_failure(failure, body.provider, model)
+        diagnostics.record(
+            event="followup_complete",
+            provider=body.provider,
+            model=model,
+            snapshot_id=_snapshot_id(),
+        )
+        if reply.action == "refine":
+            changes = request_changes(conversation.parsed_request, reply.request)
+            if changes:
+                # 재생성은 항상 새 요청에서 — run_generation 이 spec 을 바꾸므로 이전 spec 은 재사용하지 않는다.
+                rendered = _render(body.provider, body.tier, api_key, model, reply.request.to_domain())
+                conversation.parsed_request = reply.request      # 성공한 뒤에만 대화를 갱신한다
+                for key, value in rendered.items():
+                    setattr(conversation, key, value)
+                conversation.result_id = None
+            conversation.add_turn("user", "question", body.question)
+            conversation.add_turn("assistant", "refine", "\n".join(changes) or "변경 없음")
+            conversations.replace(conversation)
+            return jsonify(
+                conversation_id=conversation.conversation_id,
+                action="refine",
+                changed=bool(changes),
+                html=conversation.html,
+                downloads=conversation.downloads,
+                answer_html=followup_turn_html(body.question, changes, reply.note),
+            )
+        conversation.add_turn("user", "question", body.question)
+        conversation.add_turn("assistant", "answer", " ".join(item.text for item in reply.answer))
+        conversations.replace(conversation)
+        return jsonify(
+            conversation_id=conversation.conversation_id,
+            action="answer",
+            html=conversation.html,
+            downloads=conversation.downloads,
+            answer_html=followup_answer_html(body.question, reply.answer),
+        )
+
+    @app.post("/api/logout")
+    def logout():
+        """메모리의 API 키와 대화를 모두 지운다(파일에는 애초에 없다)."""
+        key_store.clear()
+        conversations.clear()
+        return jsonify(ok=True)
 
     @app.errorhandler(AppError)
     def app_error(error: AppError):

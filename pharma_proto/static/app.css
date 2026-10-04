@@ -189,6 +189,21 @@ details { margin-top: 14px; }
 .request-summary dd { margin: 0; overflow-wrap: anywhere; }
 .request-summary dd.missing { color: var(--warn); font-weight: 600; }
 
+/* 후속 질문 */
+.followup-panel { margin-top: 20px; }
+.followup-panel h2 { margin: 0; font-size: 18px; }
+.followup-panel .notice { margin: 0; }
+.followup-panel #followup { justify-self: start; min-width: 140px; }
+.followup-log:empty { display: none; }
+.followup-log .card { margin: 10px 0; padding: 14px 18px; }
+.followup-q { margin: 0 0 8px; font-weight: 600; }
+.followup-label { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-size: 12px; font-weight: 700; }
+.followup-a { margin: 0; padding-left: 18px; line-height: 1.7; }
+.followup-a li + li { margin-top: 4px; }
+.followup-head { margin: 0 0 6px; color: var(--primary); font-weight: 700; }
+.followup-note { margin: 8px 0 0; color: var(--text-muted); font-size: 14px; }
+.setup-fields .key-notice { padding: 0; background: none; color: var(--text-muted); font-weight: 400; }
+
 @media (max-width: 1020px) {
   .research-layout { grid-template-columns: minmax(0, 960px); }
   .gate-sidebar { position: static; }
