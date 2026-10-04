@@ -14,14 +14,14 @@
       <h1 id="setup-title">API 설정</h1>
       <div class="setup-fields">
         <label>모델 종류
-          <select id="provider">
+          <select id="provider" autocomplete="off">
             <option value="openai">OpenAI</option>
             <option value="gemini">Gemini</option>
             <option value="claude">Claude</option>
           </select>
         </label>
         <label>모델 이름
-          <select id="tier">
+          <select id="tier" autocomplete="off">
             {% for tier, model in model_catalog.openai.items() %}
             <option value="{{ tier }}"{% if tier == "normal" %} selected{% endif %}>{{ model }}</option>
             {% endfor %}

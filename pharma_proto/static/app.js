@@ -180,6 +180,7 @@ async function refreshHealth() {
 
 document.querySelector("#save-key").addEventListener("click", async () => {
   setupMessage.textContent = "";
+  populateModels();   // 브라우저가 새로고침 때 '모델 종류'만 복원했어도 모델 이름을 그 공급자 것으로 맞춘다
   try {
     await jsonRequest("/api/key", {
       method: "POST",
@@ -460,4 +461,7 @@ refreshResultsButton.addEventListener("click", refreshResults);
 
 applyTheme(document.documentElement.dataset.theme);
 populateModels();
+// 일부 브라우저(Firefox 등)는 새로고침 뒤 <select> 선택값을 change 이벤트 없이 복원한다.
+// 복원이 끝난 pageshow 시점에 모델 이름 목록을 공급자에 맞춰 다시 채운다.
+window.addEventListener("pageshow", populateModels);
 refreshHealth();
