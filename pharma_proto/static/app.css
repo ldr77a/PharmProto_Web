@@ -217,6 +217,21 @@ details { margin-top: 14px; }
 .request-summary dd { margin: 0; overflow-wrap: anywhere; }
 .request-summary dd.missing { color: var(--warn); font-weight: 600; }
 
+/* 클릭 설명(비전문가용): 근거 꼬리표·게이트 칩·배지는 버튼이지만 생김새는 그대로 */
+.help-trigger { background: none; border: 0; padding: 0; min-height: 0; border-radius: 4px; font: inherit; font-weight: inherit; color: inherit; text-align: left; cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+.help-trigger:hover:not(:disabled) { background: none; color: var(--primary); }
+button.g, button.badge, button.basis { border: 0; min-height: 0; line-height: 1.3; cursor: help; }
+button.g:hover:not(:disabled), button.badge:hover:not(:disabled), button.basis:hover:not(:disabled) { outline: 2px solid var(--border-strong); outline-offset: 1px; }
+button.g:not(.pass):not(.warning):not(.fail):hover:not(:disabled) { background: var(--surface-2); color: var(--text-muted); }
+button.g.pass:hover:not(:disabled), button.badge.ok:hover:not(:disabled), button.basis.ev:hover:not(:disabled) { background: var(--evidence-soft); color: var(--evidence); }
+button.g.warning:hover:not(:disabled), button.badge.warn:hover:not(:disabled), button.basis.gen:hover:not(:disabled) { background: var(--warn-soft); color: var(--warn); }
+button.g.fail:hover:not(:disabled), button.badge.bad:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
+.help-popover { position: absolute; z-index: 20; width: min(360px, calc(100vw - 32px)); padding: 14px 16px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 8px 24px rgb(0 0 0 / .18); }
+.help-popover .help-title { margin: 0 0 6px; font-weight: 700; color: var(--primary); }
+.help-popover .help-body { margin: 0 0 10px; font-size: 14px; line-height: 1.6; }
+.about-body p { margin: 0; font-size: 14px; line-height: 1.65; }
+.about-body b { color: var(--primary); }
+
 /* 결과 저장·저장된 작업 */
 .result-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0 0; }
 .result-actions .notice { margin: 0; overflow-wrap: anywhere; }

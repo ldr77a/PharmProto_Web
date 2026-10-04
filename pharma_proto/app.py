@@ -16,6 +16,7 @@ from werkzeug.exceptions import HTTPException
 
 from generation.explanation import build_explanation_payload, build_followup_payload
 from generation.generation_loop import run_generation
+from generation.help_text import GATES, help_entries
 from generation.html_formatter import (
     followup_answer_html,
     followup_turn_html,
@@ -180,6 +181,8 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             "index.html",
             model_catalog=MODEL_CATALOG,
             theme=preferences.load()["theme"],
+            gate_help=GATES,              # 사이드바 게이트 안내와 클릭 설명이 같은 문장을 쓴다
+            help_text=help_entries(),
         )
 
     @app.get("/api/preferences")

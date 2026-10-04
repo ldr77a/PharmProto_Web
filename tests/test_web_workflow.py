@@ -283,6 +283,18 @@ def test_research_screen_contains_collapsed_five_gate_guide(app_factory) -> None
     assert "게이트6" not in guide
     assert "화학적 호환성" not in guide
 
+    # 피드백 6번: 사이드바 문장과 클릭 설명 사전이 같은 소스(generation/help_text.py)에서 나온다.
+    from generation.help_text import GATES
+
+    help_text = json.loads(probe.text("help-text"))
+    for gate in GATES:
+        assert gate["text"] in guide
+        assert help_text[gate["key"]] == {"title": gate["title"], "text": gate["text"]}
+    assert "src:kg_role" in help_text and "basis:general" in help_text and "status:unresolved" in help_text
+    assert "hidden" in probe.attrs("help-popover")
+    assert "숫자는 AI 가 만들지 않습니다." in probe.text("about-tool")
+    assert "open" not in probe.attrs("about-tool")
+
 
 def test_generate_returns_one_real_xlsx_download_per_candidate(
     app_factory,
@@ -317,6 +329,10 @@ def test_generate_returns_one_real_xlsx_download_per_candidate(
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["html"].count('class="download-xlsx ') == 3
+    # 피드백 6번: 배지·게이트 칩·근거 꼬리표가 클릭 설명 키를 갖는다
+    assert payload["html"].count("data-help='status:pass'") == 3
+    assert payload["html"].count("data-help='gate:1'") == 3
+    assert "data-help='src:filler(q.s.)'" in payload["html"] and "data-help='src:user'" in payload["html"]
     assert [item["candidate_idx"] for item in payload["downloads"]] == [1, 2, 3]
     assert [item["filename"] for item in payload["downloads"]] == [
         "조성_후보_1.xlsx",
@@ -380,7 +396,8 @@ def test_generate_echoes_parsed_request_and_user_amounts(app_factory) -> None:
     assert "Acetaminophen 500 mg (사용자 지정)" in html
     assert "700 mg (사용자 지정)" in html
     assert "Croscarmellose sodium 4%" in html                       # 지정 분량 에코
-    assert "4.00</td><td class='ev '>사용자 지정</td>" in html       # 표의 % 와 근거 라벨
+    assert ("4.00</td><td class='ev '><button type='button' class='help-trigger' "
+            "data-help='src:user'>사용자 지정</button></td>") in html     # 표의 % 와 근거 라벨(클릭 설명)
     assert "총중량 700mg" in html
     assert "미반영 분량" not in html
 
@@ -693,6 +710,7 @@ def test_generate_renders_explanation_with_basis_badges(app_factory, monkeypatch
     html = response.get_json()["html"]
     assert html.count("<details class='explain' open>") == 1          # 해설이 있는 후보 1만
     assert "class='basis ev'" in html and "class='basis gen'" in html
+    assert "data-help='basis:evidence'" in html and "data-help='basis:general'" in html
     assert "KG 역할별 범위 n=2034" in html and "API 프로파일" in html and "검토용." in html
     payload = service.explain_payloads[0]
     assert payload["request"]["apis"][0]["name"] == "Acetaminophen"

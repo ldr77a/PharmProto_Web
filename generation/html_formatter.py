@@ -53,6 +53,24 @@ def _title_en(name: str) -> str:
         name[:1].upper() + name[1:] if name and name[0].islower() else name)
 
 
+def _source_key(cand, comp) -> str:
+    """근거 라벨의 원래 source 키(클릭 설명 사전 data-help='src:<key>' 용)."""
+    if comp.role == "api":
+        d = next((x for x in cand.doses if x.name == comp.name), None)
+        return d.source if d else ""
+    a = next((x for x in cand.allocs if x.name == comp.name), None)
+    return a.source if a else ""
+
+
+def _help_button(key: str, css_class: str, label_html: str, title: str = "") -> str:
+    """클릭하면 쉬운 말 설명이 뜨는 버튼(키보드 접근 가능). 설명 문장은 generation/help_text.py."""
+    title_attr = f" title='{html.escape(title)}'" if title else ""
+    return (
+        f"<button type='button' class='{css_class}' data-help='{html.escape(key)}'{title_attr}>"
+        f"{label_html}</button>"
+    )
+
+
 def _prov(cand, comp):
     if comp.role == "api":
         d = next((x for x in cand.doses if x.name == comp.name), None)
@@ -176,8 +194,10 @@ def _evidence_html(cand) -> str:
 
 def _basis_badge(basis: str) -> str:
     if basis == "evidence":
-        return "<span class='basis ev' title='입력된 DB·HPE6 근거를 인용한 문장'>근거</span>"
-    return "<span class='basis gen' title='모델의 일반 제제학 지식. 사람이 확인해야 함'>일반 지식·검증 필요</span>"
+        return _help_button("basis:evidence", "basis ev", "근거", "입력된 DB·HPE6 근거를 인용한 문장")
+    return _help_button(
+        "basis:general", "basis gen", "일반 지식·검증 필요", "모델의 일반 제제학 지식. 사람이 확인해야 함"
+    )
 
 
 def _refs_html(refs) -> str:
@@ -277,14 +297,21 @@ def candidate_html(cand, explanation=None) -> str:
              "unresolved": "미해결 (하드 실패)"}[cand.status]
 
     rows = []
-    for name, function, raw_mg, raw_pct, prov, green in candidate_rows(cand):
+    for component, (name, function, raw_mg, raw_pct, prov, green) in zip(
+        cand.components, candidate_rows(cand), strict=True
+    ):
         mg = f"{raw_mg:.1f}" if raw_mg is not None else "-"
         pct = f"{raw_pct:.2f}" if raw_pct is not None else "-"
+        source_key = _source_key(cand, component)
+        prov_html = (
+            _help_button(f"src:{source_key}", "help-trigger", html.escape(prov))
+            if source_key else html.escape(prov)
+        )
         rows.append(
             f"<tr><td class='ing'>{html.escape(name)}</td>"
             f"<td>{html.escape(function)}</td>"
             f"<td class='num'>{mg}</td><td class='num'>{pct}</td>"
-            f"<td class='ev {'kg' if green else ''}'>{html.escape(prov)}</td></tr>")
+            f"<td class='ev {'kg' if green else ''}'>{prov_html}</td></tr>")
     tot_mg = sum(c.mg for c in cand.components if c.mg) or 0
     tot_pct = sum(c.pct for c in cand.components if c.pct) or 0
     rows.append(
@@ -296,7 +323,7 @@ def candidate_html(cand, explanation=None) -> str:
         m = re.search(r"\d+", r.gate)
         return int(m.group()) if m else 99
     gate_syms = " ".join(
-        f"<span class='g {r.status}'>{r.gate.split()[0]} {r.symbol.split()[0]}</span>"
+        _help_button(f"gate:{_gnum(r)}", f"g {r.status}", f"{r.gate.split()[0]} {r.symbol.split()[0]}")
         for r in sorted(cand.gate_out["results"], key=_gnum))
     warn_notes = "".join(
         f"<li>{html.escape(r.reason)}</li>"
@@ -313,7 +340,7 @@ def candidate_html(cand, explanation=None) -> str:
         <h3>조성 후보 {cand.idx}</h3>
         <div class="card-actions">
           <button class="download-xlsx secondary compact" type="button" data-candidate-index="{cand.idx}" disabled>엑셀 저장</button>
-          <span class="badge {badge_cls}">{badge}</span>
+          {_help_button(f"status:{cand.status}", f"badge {badge_cls}", html.escape(badge))}
         </div>
       </div>
       <div class="pick">{html.escape(picks)}</div>

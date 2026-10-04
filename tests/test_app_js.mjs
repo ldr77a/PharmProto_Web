@@ -21,8 +21,8 @@ function fakeElement(initial = {}) {
     addEventListener(type, listener) {
       listeners.set(type, listener);
     },
-    async dispatch(type) {
-      return listeners.get(type)?.();
+    async dispatch(type, event) {
+      return listeners.get(type)?.(event);
     },
     append(...children) {
       for (const child of children) {
@@ -79,6 +79,14 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
     "#save-status": fakeElement(),
     "#refresh-results": fakeElement(),
     "#results-list": fakeElement(),
+    "#help-popover": fakeElement({hidden: true}),
+    "#help-title": fakeElement(),
+    "#help-body": fakeElement(),
+    "#help-close": fakeElement(),
+    "#help-text": fakeElement({textContent: JSON.stringify({
+      "src:kg_role": {title: "KG 역할별 범위", text: "같은 역할로 쓰인 배합의 중앙값입니다."},
+      "gate:1": {title: "게이트1 사용량 범위", text: "실제 배합 범위와 비교합니다."},
+    })}),
     "#followup-panel": fakeElement({hidden: true}),
     "#followup-question": fakeElement(),
     "#followup-log": fakeElement(),
@@ -122,6 +130,7 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
 
   const documentElement = fakeElement({dataset: {theme: "system"}});
   const windowListeners = new Map();
+  const documentListeners = new Map();
   const window = {
     print() {
       eventLog.push(["print"]);
@@ -138,6 +147,9 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
     },
     querySelectorAll() {
       return [];
+    },
+    addEventListener(type, listener) {
+      documentListeners.set(type, listener);
     },
     createElement(tag) {
       if (tag === "option") return fakeElement({selected: false});
@@ -210,7 +222,7 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
   });
   vm.runInContext(appSource, context);
 
-  return {elements, eventLog, fetchCalls, results, documentElement, windowListeners};
+  return {elements, eventLog, fetchCalls, results, documentElement, windowListeners, documentListeners};
 }
 
 test("API 확인 후 선택한 전체 모델명과 연구 화면을 표시한다", async () => {
@@ -362,4 +374,32 @@ test("저장 버튼은 대화를 저장하고 목록을 갱신하며, 열기는 
   await deleteButton.dispatch("click");
   assert.equal(harness.elements["#results-list"].children.length, 1);
   assert.equal(harness.elements["#results-list"].children[0].className, "empty");
+});
+
+test("근거 꼬리표·게이트 칩을 클릭하면 쉬운 말 설명이 열리고 닫기·ESC 로 닫힌다", async () => {
+  const harness = browserHarness();
+  const trigger = (help, text) => ({
+    dataset: {help}, textContent: text,
+    closest(selector) { return selector === "[data-help]" ? this : null; },
+  });
+
+  await harness.results.dispatch("click", {target: trigger("src:kg_role", "KG 역할별 범위, n=10"), preventDefault() {}});
+
+  assert.equal(harness.elements["#help-popover"].hidden, false);
+  assert.equal(harness.elements["#help-title"].textContent, "KG 역할별 범위");
+  assert.ok(harness.elements["#help-body"].textContent.includes("중앙값"));
+  assert.equal(harness.elements["#help-close"].focused, true);
+
+  await harness.elements["#help-close"].dispatch("click");
+  assert.equal(harness.elements["#help-popover"].hidden, true);
+
+  await harness.results.dispatch("click", {target: trigger("src:mystery", "정체불명")});
+  assert.equal(harness.elements["#help-title"].textContent, "정체불명");
+  assert.ok(harness.elements["#help-body"].textContent.includes("준비되지"));
+
+  harness.documentListeners.get("keydown")({key: "Escape"});
+  assert.equal(harness.elements["#help-popover"].hidden, true);
+
+  await harness.results.dispatch("click", {target: {closest: () => null}});     // 설명 아닌 곳 클릭은 무시
+  assert.equal(harness.elements["#help-popover"].hidden, true);
 });

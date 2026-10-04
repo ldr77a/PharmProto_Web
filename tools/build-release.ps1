@@ -102,6 +102,7 @@ try {
         "generation\excipient_allocator.py",
         "generation\explanation.py",
         "generation\generation_loop.py",
+        "generation\help_text.py",
         "generation\html_formatter.py",
         "generation\input_parser.py",
         "generation\oral_solid_profiles.py",

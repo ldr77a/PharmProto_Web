@@ -22,6 +22,11 @@ const saveButton = document.querySelector("#save-result");
 const saveStatus = document.querySelector("#save-status");
 const refreshResultsButton = document.querySelector("#refresh-results");
 const resultsList = document.querySelector("#results-list");
+const helpText = JSON.parse(document.querySelector("#help-text").textContent || "{}");
+const helpPopover = document.querySelector("#help-popover");
+const helpTitle = document.querySelector("#help-title");
+const helpBody = document.querySelector("#help-body");
+const helpClose = document.querySelector("#help-close");
 // 서버 메모리에 있는 현재 대화의 id. 새로고침·로그아웃이면 사라진다(브라우저에 저장하지 않음).
 let conversationId = null;
 
@@ -297,6 +302,48 @@ followupButton.addEventListener("click", async () => {
     followupButton.disabled = false;
     followupButton.ariaBusy = "false";
   }
+});
+
+// 클릭 설명: 근거 꼬리표·게이트 칩·배지(data-help)를 누르면 쉬운 말 설명이 팝오버로 뜬다.
+function closeHelp() {
+  helpPopover.hidden = true;
+}
+
+function openHelp(trigger) {
+  const entry = helpText[trigger.dataset.help];
+  helpTitle.textContent = entry ? entry.title : (trigger.textContent || "").trim();
+  helpBody.textContent = entry ? entry.text : "이 항목의 설명이 아직 준비되지 않았습니다.";
+  helpPopover.hidden = false;
+  if (helpPopover.style && typeof trigger.getBoundingClientRect === "function") {
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.min(360, (window.innerWidth || 800) - 32);
+    const left = Math.max(16, Math.min(rect.left + (window.scrollX || 0), (window.innerWidth || 800) - width - 16));
+    helpPopover.style.top = `${rect.bottom + (window.scrollY || 0) + 6}px`;
+    helpPopover.style.left = `${left}px`;
+  }
+  helpClose.focus();
+}
+
+function handleHelpClick(event) {
+  const target = event && event.target;
+  const trigger = target && typeof target.closest === "function" ? target.closest("[data-help]") : null;
+  if (!trigger) return;
+  if (typeof event.preventDefault === "function") event.preventDefault();
+  openHelp(trigger);
+}
+
+results.addEventListener("click", handleHelpClick);
+followupLog.addEventListener("click", handleHelpClick);
+helpClose.addEventListener("click", closeHelp);
+document.addEventListener("keydown", (event) => {
+  if (event && event.key === "Escape") closeHelp();
+});
+document.addEventListener("click", (event) => {
+  if (helpPopover.hidden) return;
+  const target = event && event.target;
+  if (target && typeof target.closest === "function"
+      && (target.closest("#help-popover") || target.closest("[data-help]"))) return;
+  closeHelp();
 });
 
 // 저장된 작업: 수동 저장, 목록, 열기(읽기 전용), 이어서 질문(결정적 재계산, LLM 호출 없음), 삭제
