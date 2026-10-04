@@ -11,7 +11,6 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from gates.rule_data import Rule  # noqa: F401  (동일 패키지 확인용)
 from pharma_proto.knowledge import KnowledgeRepository, UsageEvidence
 
 _SEED_PATH = Path(__file__).resolve().parent.parent / "function_seed.json"

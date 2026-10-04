@@ -5,5 +5,7 @@
   "atorvastatin": {"mg": 20, "ref": "표준 성인 용량"},
   "amlodipine": {"mg": 5, "ref": "표준 성인 용량"},
   "omeprazole": {"mg": 20, "ref": "표준 성인 용량"},
-  "losartan": {"mg": 50, "ref": "표준 성인 용량"}
+  "losartan": {"mg": 50, "ref": "표준 성인 용량"},
+  "trimetazidine hydrochloride": {"mg": 20, "ref": "식약처 허가 라벨 메타진정 품목기준코드 199703521"},
+  "trimetazidine": {"mg": 20, "ref": "식약처 허가 라벨 메타진정 품목기준코드 199703521"}
 }
