@@ -47,6 +47,21 @@ class KnowledgeRepository(Protocol):
 
     def function_catalog(self) -> tuple[FunctionDescriptor, ...]: ...
 
+    # 역할층(schema 2): "이 배합에서 맡은 역할" 기준 집계. 빈 결과는 None / [] / RangeStats(n=0).
+    def primary_role(self, ingredient: str) -> str | None: ...
+
+    def role_candidates(
+        self,
+        role: str,
+        *,
+        dosage_form_bases: tuple[str, ...],
+        limit: int = 3,
+    ) -> list[str]: ...
+
+    def role_pct_range(self, ingredient: str, role: str) -> RangeStats: ...
+
+    def role_pct_sum_range(self, role: str) -> RangeStats: ...
+
     def ingredient_evidence(self, ingredient: str) -> IngredientEvidence: ...
 
     def health(self) -> Mapping[str, object]: ...
@@ -81,6 +96,24 @@ class NullKnowledgeRepository:
 
     def function_catalog(self) -> tuple[FunctionDescriptor, ...]:
         return ()
+
+    def primary_role(self, ingredient: str) -> str | None:
+        return None
+
+    def role_candidates(
+        self,
+        role: str,
+        *,
+        dosage_form_bases: tuple[str, ...],
+        limit: int = 3,
+    ) -> list[str]:
+        return []
+
+    def role_pct_range(self, ingredient: str, role: str) -> RangeStats:
+        return RangeStats(n=0)
+
+    def role_pct_sum_range(self, role: str) -> RangeStats:
+        return RangeStats(n=0)
 
     def ingredient_evidence(self, ingredient: str) -> IngredientEvidence:
         return IngredientEvidence.empty(ingredient)

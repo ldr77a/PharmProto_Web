@@ -33,12 +33,17 @@ def function_for_component(
     comp,
     seed: dict[str, str] | None = None,
 ) -> str | None:
-    """성분 기능: 명시값 > repository > function_seed (API role은 기본값)."""
+    """성분 기능: 명시값 > 역할 사전 기본 역할 > repository.function > function_seed (API role은 기본값)."""
     if comp.function:
         return comp.function
     if comp.role == "api":
         return "api"
     if repository is not None:
+        primary = getattr(repository, "primary_role", None)   # 역할 사전의 기본 역할(schema 2) 우선
+        if callable(primary):
+            role = primary(comp.name)
+            if role:
+                return role
         function = repository.function(comp.name)
         if function:
             return function

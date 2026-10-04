@@ -46,6 +46,7 @@ def complete_excipient_choices(
         spec.selection_sources = source_map
 
     lookup = getattr(repository, "ingredient_candidates", None)
+    role_lookup = getattr(repository, "role_candidates", None)
     catalog_lookup = getattr(repository, "function_catalog", None)
     catalog = tuple(catalog_lookup()) if callable(catalog_lookup) else ()
     auto_function_names = {
@@ -62,7 +63,17 @@ def complete_excipient_choices(
 
         candidates: list[str] = []
         curated = list(CURATED_DEFAULTS.get(role, ()))
-        if callable(lookup):
+        used_role_table = False
+        if callable(role_lookup):   # schema 2: "이 배합에서 맡은 역할" 기준 순위(요청 제형 배합 수 합)
+            candidates = list(
+                role_lookup(
+                    role,
+                    dosage_form_bases=profile.dosage_form_bases,
+                    limit=max(30, limit_per_role * 10),
+                )
+            )
+            used_role_table = bool(candidates)
+        if not candidates and callable(lookup):
             aliases = role_aliases(role)
             if catalog:
                 aliases = tuple(alias for alias in aliases if alias in auto_function_names)
@@ -87,10 +98,11 @@ def complete_excipient_choices(
         combined = selected + fallback
         if combined:
             spec.excipient_choices[role] = combined
+            kg_label = "kg_role" if used_role_table else "kg"
             if selected and fallback:
-                source_map[role] = "kg+curated_default"
+                source_map[role] = f"{kg_label}+curated_default"
             elif selected:
-                source_map[role] = "kg"
+                source_map[role] = kg_label
             else:
                 source_map[role] = "curated_default"
 

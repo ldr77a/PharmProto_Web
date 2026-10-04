@@ -140,7 +140,9 @@ def run_generation(
                 "warning" if gate_out["warnings"] else "pass")
             source_labels = {
                 "kg": "DB 근거",
+                "kg_role": "DB 역할별 근거",
                 "kg+curated_default": "DB 근거 + 검토 기본값",
+                "kg_role+curated_default": "DB 역할별 근거 + 검토 기본값",
                 "curated_default": "검토 기본값",
             }
             selection_notes = [

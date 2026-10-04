@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from gates.formulation import Component  # type: ignore[import-not-found]
 from generation.oral_solid_profiles import role_aliases
-from pharma_proto.knowledge import KnowledgeRepository
+from pharma_proto.knowledge import KnowledgeRepository, RangeStats
 
 # KG에 없을 때 기능별 통상 % (중앙값 근사). (lo, hi) → mid 사용.
 FUNCTION_DEFAULT: dict[str, tuple[float, float]] = {
@@ -38,7 +38,7 @@ class Alloc:
     name: str
     function: str
     pct: float
-    source: str          # user | hpe6 | hpe6+kg | kg | function_default | filler(q.s.)
+    source: str          # user | hpe6 | hpe6+kg | hpe6+kg_role | kg | kg_role | function_default | filler(q.s.)
     n: int = 0
     mg: float = 0.0
 
@@ -57,7 +57,12 @@ def _rep_pct(
     if user_pct is not None:
         return user_pct, "user", 0
     if repository is not None:
-        stats = repository.pct_range(ingredient)
+        role_range = getattr(repository, "role_pct_range", None)   # schema 2: (성분, 역할) 별 범위
+        stats = role_range(ingredient, func) if callable(role_range) else RangeStats(n=0)
+        kg_label = "kg_role"
+        if stats.n < 5 or not stats.median or stats.median <= 0:   # 표본 부족·0% 중앙값은 역할별 범위로 쓰지 않는다
+            stats = repository.pct_range(ingredient)
+            kg_label = "kg"
         evidence_lookup = getattr(repository, "ingredient_evidence", None)
         if callable(evidence_lookup):
             evidence = evidence_lookup(ingredient)
@@ -94,12 +99,12 @@ def _rep_pct(
                         if intersection_lo <= intersection_hi:
                             return (
                                 round((intersection_lo + intersection_hi) / 2, 3),
-                                "hpe6+kg",
+                                f"hpe6+{kg_label}",
                                 stats.n,
                             )
                     return round((lo + hi) / 2, 3), "hpe6", 1
         if stats.n > 0 and stats.median is not None:
-            return round(stats.median, 3), "kg", stats.n
+            return round(stats.median, 3), kg_label, stats.n
     lo, hi = FUNCTION_DEFAULT.get(func, (1, 3))
     return round((lo + hi) / 2, 3), "function_default", 0
 

@@ -14,7 +14,15 @@ class FakeKnowledge:
         functions: Mapping[str, str] | None = None,
         function_ranges: Mapping[str, RangeStats] | None = None,
         usage: Mapping[tuple[str, str], UsageEvidence] | None = None,
+        primary_roles: Mapping[str, str] | None = None,
+        role_candidates: Mapping[str, list[str]] | None = None,
+        role_ranges: Mapping[tuple[str, str], RangeStats] | None = None,
+        role_sum_ranges: Mapping[str, RangeStats] | None = None,
     ) -> None:
+        self._primary_roles = dict({} if primary_roles is None else primary_roles)
+        self._role_candidates = dict({} if role_candidates is None else role_candidates)
+        self._role_ranges = dict({} if role_ranges is None else role_ranges)
+        self._role_sum_ranges = dict({} if role_sum_ranges is None else role_sum_ranges)
         self._doses = dict(
             {"rabeprazole": [20.0, 40.0]} if doses is None else doses
         )
@@ -47,6 +55,19 @@ class FakeKnowledge:
             function,
             RangeStats(n=10, p5=1, p95=10, median=4),
         )
+
+    # 역할층(schema 2): 설정하지 않으면 계약상 빈 결과
+    def primary_role(self, ingredient: str) -> str | None:
+        return self._primary_roles.get(ingredient)
+
+    def role_candidates(self, role: str, *, dosage_form_bases: tuple[str, ...], limit: int = 3) -> list[str]:
+        return list(self._role_candidates.get(role, []))[: max(1, int(limit))]
+
+    def role_pct_range(self, ingredient: str, role: str) -> RangeStats:
+        return self._role_ranges.get((ingredient, role), RangeStats(n=0))
+
+    def role_pct_sum_range(self, role: str) -> RangeStats:
+        return self._role_sum_ranges.get(role, RangeStats(n=0))
 
     def compatibility_usage(self, api: str, excipient: str) -> UsageEvidence:
         return self._usage.get(

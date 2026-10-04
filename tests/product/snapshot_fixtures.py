@@ -12,7 +12,7 @@ def write_test_snapshot(
     root: Path,
     *,
     snapshot_id: str = "fixture-snapshot",
-    schema_version: int = 1,
+    schema_version: int = 2,
 ) -> tuple[Path, Path]:
     root.mkdir(parents=True, exist_ok=True)
     database = root / "knowledge.sqlite"
@@ -82,6 +82,31 @@ def write_test_snapshot(
         "INSERT INTO lookup_ingredient_candidates "
         "(function_name, dosage_form_base, ingredient_key, rank) VALUES (?, ?, ?, ?)",
         ("binder", "tablet", "example excipient", 1),
+    )
+    connection.execute(
+        "INSERT INTO lookup_role_dictionary "
+        "(ingredient_key, primary_role, allowed_roles_json, review_status, ruleset_version) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("example excipient", "diluent", '["binder", "diluent"]', "claude_suggested", "excipient-roles-v1"),
+    )
+    connection.executemany(
+        "INSERT INTO lookup_role_candidates "
+        "(role, dosage_form_base, ingredient_key, rank, formulation_count) VALUES (?, ?, ?, ?, ?)",
+        (
+            ("binder", "tablet", "example excipient", 1, 5),
+            ("binder", "tablet", "other binder", 2, 3),
+            ("binder", "granule", "other binder", 1, 4),
+        ),
+    )
+    connection.execute(
+        "INSERT INTO lookup_role_pct_ranges "
+        "(ingredient_key, role, n, lo, hi, mean, p5, p95, median) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("example excipient", "binder", 4, 2.0, 8.0, 5.0, 2.5, 7.5, 5.0),
+    )
+    connection.execute(
+        "INSERT INTO lookup_role_pct_sums "
+        "(role, n, lo, hi, mean, p5, p95, median) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ("binder", 5, 1.0, 10.0, 4.0, 1.5, 9.0, 4.0),
     )
     connection.execute(
         "INSERT INTO lookup_compatibility "

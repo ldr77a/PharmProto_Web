@@ -55,7 +55,10 @@ def check(
         s = sums.get(func)
         if s is None:
             continue
-        stats = repository.function_pct_range(func)
+        role_sum = getattr(repository, "role_pct_sum_range", None)   # schema 2: 추정 역할 기준 %합 분포
+        stats = role_sum(func) if callable(role_sum) else None
+        if stats is None or stats.n < 5:
+            stats = repository.function_pct_range(func)
         if stats.n < 5:
             notes.append(f"{func} 분포표본 부족(n={stats.n})")
             continue

@@ -19,7 +19,7 @@ from pharma_proto.errors import (
     AppError,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2: 역할층 표(lookup_role_*) 추가
 SUPPORTED_SCHEMA_VERSIONS = frozenset({SCHEMA_VERSION})
 
 SCHEMA_SQL = """
@@ -168,8 +168,52 @@ CREATE TABLE lookup_ingredient_incompatibilities (
     PRIMARY KEY(ingredient_key, evidence_id, normalized_target_name)
 ) STRICT;
 
+CREATE TABLE lookup_role_dictionary (
+    ingredient_key TEXT PRIMARY KEY,
+    primary_role TEXT,
+    allowed_roles_json TEXT NOT NULL,
+    review_status TEXT NOT NULL,
+    ruleset_version TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE lookup_role_candidates (
+    role TEXT NOT NULL,
+    dosage_form_base TEXT NOT NULL,
+    ingredient_key TEXT NOT NULL,
+    rank INTEGER NOT NULL,
+    formulation_count INTEGER NOT NULL,
+    PRIMARY KEY(role, dosage_form_base, ingredient_key)
+) STRICT;
+
+CREATE TABLE lookup_role_pct_ranges (
+    ingredient_key TEXT NOT NULL,
+    role TEXT NOT NULL,
+    n INTEGER NOT NULL,
+    lo REAL,
+    hi REAL,
+    mean REAL,
+    p5 REAL,
+    p95 REAL,
+    median REAL,
+    PRIMARY KEY(ingredient_key, role)
+) STRICT;
+
+CREATE TABLE lookup_role_pct_sums (
+    role TEXT PRIMARY KEY,
+    n INTEGER NOT NULL,
+    lo REAL,
+    hi REAL,
+    mean REAL,
+    p5 REAL,
+    p95 REAL,
+    median REAL
+) STRICT;
+
 CREATE INDEX idx_candidates_lookup
 ON lookup_ingredient_candidates(function_name, dosage_form_base, rank);
+
+CREATE INDEX idx_role_candidates_lookup
+ON lookup_role_candidates(role, dosage_form_base, rank);
 
 CREATE INDEX idx_monographs_ingredient
 ON lookup_ingredient_monographs(ingredient_key);

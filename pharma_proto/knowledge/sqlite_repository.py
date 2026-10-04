@@ -111,6 +111,47 @@ class SQLiteKnowledgeRepository:
         )
         return [str(row[0]) for row in rows]
 
+    # --- 역할층(schema 2) ---------------------------------------------------------------
+    def primary_role(self, ingredient: str) -> str | None:
+        row = self._connection.execute(
+            "SELECT primary_role FROM lookup_role_dictionary WHERE ingredient_key = ?",
+            (_ingredient_key(ingredient),),
+        ).fetchone()
+        return None if row is None or row[0] is None else str(row[0])
+
+    def role_candidates(
+        self,
+        role: str,
+        *,
+        dosage_form_bases: tuple[str, ...],
+        limit: int = 3,
+    ) -> list[str]:
+        if not role or not dosage_form_bases:
+            return []
+        dosage_marks = ",".join("?" for _ in dosage_form_bases)
+        rows = self._connection.execute(
+            "SELECT ingredient_key, sum(formulation_count) AS total "
+            "FROM lookup_role_candidates "
+            f"WHERE role = ? AND dosage_form_base IN ({dosage_marks}) "
+            "GROUP BY ingredient_key ORDER BY total DESC, ingredient_key LIMIT ?",
+            (role, *dosage_form_bases, max(1, int(limit))),
+        )
+        return [str(row[0]) for row in rows]
+
+    def role_pct_range(self, ingredient: str, role: str) -> RangeStats:
+        row = self._connection.execute(
+            "SELECT * FROM lookup_role_pct_ranges WHERE ingredient_key = ? AND role = ?",
+            (_ingredient_key(ingredient), role),
+        ).fetchone()
+        return _range_from_row(row) if row else RangeStats(n=0)
+
+    def role_pct_sum_range(self, role: str) -> RangeStats:
+        row = self._connection.execute(
+            "SELECT * FROM lookup_role_pct_sums WHERE role = ?",
+            (role,),
+        ).fetchone()
+        return _range_from_row(row) if row else RangeStats(n=0)
+
     def compatibility_usage(self, api: str, excipient: str) -> UsageEvidence:
         parameters = (api.lower(), excipient.lower())
         matching = (

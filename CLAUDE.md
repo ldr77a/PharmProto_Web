@@ -29,7 +29,11 @@ keys. Runtime data such as `generation/standard_doses.json` is owned here.
 `release-data/manifest.json` carries the snapshot id, SHA-256, schema version, and counts. The app
 refuses a snapshot whose `schema_version` is not in `SUPPORTED_SCHEMA_VERSIONS` (`DB-VERSION-001`) or
 whose hash/counts mismatch (`DB-INTEGRITY-001`). The app never copies, writes, migrates, or updates the
-database in place; rollback means re-running an older ZIP.
+database in place; rollback means re-running an older ZIP. Schema 2 snapshots carry the role layer
+(`lookup_role_*`): `generation/candidate_selector.py`, `generation/excipient_allocator.py`,
+`gates/manufacturability.py` and `gates/kg_util.py` consult `role_candidates` / `role_pct_range` /
+`role_pct_sum_range` / `primary_role` first and fall back to the function-based lookups when the role
+table has fewer than 5 observations. Provenance labels `kg_role` / `hpe6+kg_role` mark the role-specific path.
 
 ## Request flow
 

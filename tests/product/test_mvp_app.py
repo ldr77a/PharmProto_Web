@@ -61,7 +61,7 @@ def test_app_health_and_diagnostics_expose_only_safe_status(tmp_path, monkeypatc
         "status": "ok",
         "app_version": "0.1.0",
         "snapshot_id": "fixture-snapshot",
-        "schema_version": 1,
+        "schema_version": 2,
         "node_count": 2,
         "relationship_count": 1,
         "providers": {"openai": False, "gemini": False, "claude": False},
