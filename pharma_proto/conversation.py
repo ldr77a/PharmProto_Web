@@ -30,11 +30,15 @@ class Conversation:
     explanation_error: str | None
     html: str
     downloads: list[dict]
-    turns: list[dict] = field(default_factory=list)   # {"role": user|assistant, "kind": question|answer|refine, "text"}
+    turns: list[dict] = field(default_factory=list)   # {"role", "kind": question|answer|refine, "text", "html"}
     result_id: str | None = None                      # 저장본과 연결돼 있으면 그 id(저장 뒤 요청이 바뀌면 None)
 
-    def add_turn(self, role: str, kind: str, text: str) -> None:
-        self.turns.append({"role": role, "kind": kind, "text": text})
+    def add_turn(self, role: str, kind: str, text: str, html: str = "") -> None:
+        """html 은 화면에 그린 카드(답변·수정 기록) — 저장본과 '열기'가 그대로 다시 보여 준다."""
+        turn = {"role": role, "kind": kind, "text": text}
+        if html:
+            turn["html"] = html
+        self.turns.append(turn)
         del self.turns[:-MAX_TURNS]
 
 

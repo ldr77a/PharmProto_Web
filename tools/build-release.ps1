@@ -80,6 +80,7 @@ try {
         "pharma_proto\instance_lock.py",
         "pharma_proto\launcher.py",
         "pharma_proto\preferences.py",
+        "pharma_proto\results_store.py",
         "pharma_proto\knowledge\__init__.py",
         "pharma_proto\knowledge\contracts.py",
         "pharma_proto\knowledge\evidence.py",

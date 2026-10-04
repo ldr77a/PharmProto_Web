@@ -398,6 +398,30 @@ def request_summary_html(spec, candidates) -> str:
     return f"<div class='card request-summary'><h4>요청 해석</h4><dl>{rows}</dl></div>"
 
 
+RESULT_FRAGMENT_START = "<!-- phrama:result -->"
+RESULT_FRAGMENT_END = "<!-- /phrama:result -->"
+
+
+def standalone_result_html(fragment: str, *, css_text: str, title: str, turns=()) -> str:
+    """저장용 독립 HTML — CSS 를 안에 넣어 파일만 열어도 서식이 보인다(앱이 서빙하지 않으므로 CSP 무관).
+
+    결과 조각은 마커로 감싸 두어 앱이 다시 열 때 그 부분만 잘라 쓴다. 후속 질의응답은 조각 뒤에 붙인다.
+    """
+    log = "".join(str(turn.get("html") or "") for turn in turns if isinstance(turn, dict))
+    log_html = f"<section class='followup-log'><h2>후속 질의응답</h2>{log}</section>" if log else ""
+    return (
+        "<!doctype html>\n<html lang='ko' data-theme='light'>\n<head>\n<meta charset='utf-8'>\n"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>\n"
+        f"<title>{html.escape(title)}</title>\n"
+        f"<style>\n{css_text}\n.print-only {{ display: block; }}\n"
+        "main { width: min(960px, calc(100% - 32px)); margin: 24px auto 48px; }\n"
+        ".followup-log h2 { font-size: 18px; margin: 24px 0 8px; }\n</style>\n</head>\n<body>\n<main>\n"
+        f"{RESULT_FRAGMENT_START}{fragment}{RESULT_FRAGMENT_END}\n{log_html}\n"
+        "<p class='notice review-notice'>연구 검토용 시제품입니다. 생성 결과는 반드시 사람이 검토해야 합니다.</p>\n"
+        "</main>\n</body>\n</html>\n"
+    )
+
+
 def print_header_html(meta) -> str:
     """인쇄물·저장본 머리글(화면에서는 숨김): 요청, 생성 시각, DB 스냅샷, 모델, 면책."""
     if not meta:

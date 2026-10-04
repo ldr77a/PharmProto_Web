@@ -518,6 +518,92 @@ def test_logout_clears_keys_and_conversations(app_factory) -> None:
     assert client.post("/api/followup", json=body).get_json() == {"error": "CONVERSATION-001"}
 
 
+def test_save_list_open_resume_and_delete_round_trip(app_factory, monkeypatch, tmp_path: Path) -> None:
+    """피드백 9번: 수동 저장 → 목록 → 열기 → 이어서 질문(LLM 호출 없이 결정적 재계산) → 삭제."""
+    parsed = _parsed_request(n_candidates=1)
+    service = _ConversationalFakeLLMService(parsed, explanation=_explanation(), reply=None)
+    calls = _count_generations(monkeypatch)
+    client = app_factory(llm_service=service).test_client()
+    client.post("/api/key", json={"provider": "claude", "api_key": "test-key"})
+    first = client.post("/api/generate", json={"provider": "claude", "tier": "normal",
+                                               "question": "아세트아미노펜 500 mg 정제"}).get_json()
+
+    saved = client.post("/api/results", json={"conversation_id": first["conversation_id"]})
+
+    assert saved.status_code == 200
+    result_id = saved.get_json()["result_id"]
+    folder = tmp_path / "PhramaProto" / "results" / result_id
+    assert (folder / "request.json").is_file() and (folder / "조성_후보_1.xlsx").is_file()
+    assert "test-key" not in (folder / "request.json").read_text(encoding="utf-8")
+    assert "검토용." in (folder / "result.html").read_text(encoding="utf-8")
+
+    listing = client.get("/api/results").get_json()["results"]
+    assert [item["id"] for item in listing] == [result_id]
+    assert listing[0]["api_names"] == ["acetaminophen"] and listing[0]["n_candidates"] == 1
+
+    opened = client.get(f"/api/results/{result_id}").get_json()
+    assert opened["html"] == first["html"] and opened["resumable"] is True
+    assert opened["question"] == "아세트아미노펜 500 mg 정제" and opened["turns"][0]["kind"] == "question"
+    assert str(tmp_path) not in json.dumps(opened) and str(tmp_path) not in json.dumps(listing)
+
+    resumed = client.post(f"/api/results/{result_id}/resume", json={"provider": "claude", "tier": "normal"})
+
+    assert resumed.status_code == 200
+    data = resumed.get_json()
+    assert len(data["conversation_id"]) == 32 and data["conversation_id"] != first["conversation_id"]
+    assert "조성 후보 1" in data["html"] and "검토용." in data["html"]      # 저장된 해설을 재사용
+    assert service.explain_calls == 1 and calls == [1, 1]                 # LLM 없이 결정적 재계산
+
+    assert client.delete(f"/api/results/{result_id}").get_json() == {"deleted": True}
+    assert client.get("/api/results").get_json() == {"results": []}
+    assert client.get(f"/api/results/{result_id}").status_code == 404
+
+
+def test_answer_followup_after_save_is_appended_to_the_saved_folder(app_factory, tmp_path: Path) -> None:
+    parsed = _parsed_request(n_candidates=1)
+    reply = _followup_reply(action="answer", request=parsed,
+                            answer=[{"text": "희석제는 범위 안이다.", "basis": "evidence", "refs": ["KG n=10"]}])
+    service = _ConversationalFakeLLMService(parsed, reply=reply)
+    client = app_factory(llm_service=service).test_client()
+    client.post("/api/key", json={"provider": "openai", "api_key": "test-key"})
+    first = client.post("/api/generate", json={"provider": "openai", "tier": "normal", "question": "q"}).get_json()
+    result_id = client.post("/api/results", json={"conversation_id": first["conversation_id"]}).get_json()["result_id"]
+
+    client.post("/api/followup", json={"provider": "openai", "tier": "normal",
+                                       "conversation_id": first["conversation_id"], "question": "왜 이 희석제?"})
+
+    folder = tmp_path / "PhramaProto" / "results" / result_id
+    turns = json.loads((folder / "followup.json").read_text(encoding="utf-8"))
+    assert [t["kind"] for t in turns] == ["question", "question", "answer"]
+    assert "희석제는 범위 안이다." in (folder / "result.html").read_text(encoding="utf-8")
+    assert "희석제는 범위 안이다." in client.get(f"/api/results/{result_id}").get_json()["turns"][-1]["html"]
+
+
+def test_resume_refuses_other_snapshot_and_unknown_ids(app_factory, tmp_path: Path) -> None:
+    service = _ConversationalFakeLLMService(_parsed_request(n_candidates=1), reply=None)
+    client = app_factory(llm_service=service).test_client()
+    client.post("/api/key", json={"provider": "openai", "api_key": "test-key"})
+    first = client.post("/api/generate", json={"provider": "openai", "tier": "normal", "question": "q"}).get_json()
+    result_id = client.post("/api/results", json={"conversation_id": first["conversation_id"]}).get_json()["result_id"]
+    request_file = tmp_path / "PhramaProto" / "results" / result_id / "request.json"
+    request = json.loads(request_file.read_text(encoding="utf-8"))
+    request["snapshot_id"] = "older-snapshot"
+    request_file.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+
+    stale = client.post(f"/api/results/{result_id}/resume", json={"provider": "openai", "tier": "normal"})
+    unknown = client.post("/api/results/20990101T000000Z-deadbeef/resume", json={"provider": "openai"})
+    bad_id = client.get("/api/results/not-an-id")
+    missing_conversation = client.post("/api/results", json={"conversation_id": "f" * 32})
+    extra = client.post("/api/results", json={"conversation_id": first["conversation_id"], "path": "x"})
+
+    assert (stale.status_code, stale.get_json()) == (409, {"error": "RESULTS-SNAPSHOT-001"})
+    assert client.get(f"/api/results/{result_id}").get_json()["resumable"] is False     # 열람·다운로드는 가능
+    assert (unknown.status_code, unknown.get_json()) == (404, {"error": "RESULTS-001"})
+    assert (bad_id.status_code, bad_id.get_json()) == (404, {"error": "RESULTS-001"})
+    assert (missing_conversation.status_code, missing_conversation.get_json()) == (404, {"error": "CONVERSATION-001"})
+    assert (extra.status_code, extra.get_json()) == (400, {"error": "REQUEST-001"})
+
+
 def test_generate_logs_safe_provider_diagnostics(app_factory, tmp_path: Path) -> None:
     failure = LLMFailure(
         "LLM-UPSTREAM-001",

@@ -17,6 +17,11 @@ const followupButton = document.querySelector("#followup");
 const logoutButton = document.querySelector("#logout");
 const themeToggle = document.querySelector("#theme-toggle");
 const printButton = document.querySelector("#print");
+const resultActions = document.querySelector("#result-actions");
+const saveButton = document.querySelector("#save-result");
+const saveStatus = document.querySelector("#save-status");
+const refreshResultsButton = document.querySelector("#refresh-results");
+const resultsList = document.querySelector("#results-list");
 // 서버 메모리에 있는 현재 대화의 id. 새로고침·로그아웃이면 사라진다(브라우저에 저장하지 않음).
 let conversationId = null;
 
@@ -45,11 +50,33 @@ function populateModels() {
   selectedModel.textContent = modelCatalog[provider.value][tier.value];
 }
 
+function setFollowupEnabled(enabled) {
+  followupQuestion.disabled = !enabled;
+  followupButton.disabled = !enabled;
+}
+
 function resetConversation() {
   conversationId = null;
   followupPanel.hidden = true;
   followupLog.replaceChildren();
   followupQuestion.value = "";
+  setFollowupEnabled(true);
+  resultActions.hidden = true;
+  saveStatus.textContent = "";
+}
+
+// 결과 표시는 생성·후속 수정·저장본 열기·이어서 질문이 모두 같은 길을 탄다.
+function showResult(data) {
+  results.innerHTML = data.html;
+  enableDownloads(data.downloads || []);
+  reviewNotice.hidden = results.querySelector(".card") === null;
+}
+
+function showTurns(turns) {
+  followupLog.replaceChildren();
+  for (const turn of turns || []) {
+    if (turn && turn.html) appendFollowupLog(turn.html);
+  }
 }
 
 function showApiSetup() {
@@ -75,6 +102,7 @@ function showResearchApp() {
   researchApp.hidden = false;
   message.textContent = "API 설정이 적용되었습니다.";
   question.focus();
+  refreshResults();
 }
 
 function downloadWorkbook(item) {
@@ -219,11 +247,10 @@ generateButton.addEventListener("click", async () => {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({provider: provider.value, tier: tier.value, question: question.value}),
     });
-    results.innerHTML = data.html;
-    enableDownloads(data.downloads || []);
-    reviewNotice.hidden = results.querySelector(".card") === null;
+    showResult(data);
     conversationId = data.conversation_id || null;
     followupPanel.hidden = conversationId === null || reviewNotice.hidden;
+    resultActions.hidden = followupPanel.hidden;
     message.textContent = "완료";
   } catch (error) {
     message.textContent = describeError(error);
@@ -253,9 +280,8 @@ followupButton.addEventListener("click", async () => {
     });
     conversationId = data.conversation_id || conversationId;
     if (data.action === "refine" && data.changed) {
-      results.innerHTML = data.html;
-      enableDownloads(data.downloads || []);
-      reviewNotice.hidden = results.querySelector(".card") === null;
+      showResult(data);
+      saveStatus.textContent = "";   // 표가 바뀌었으니 저장본과 다르다
     }
     appendFollowupLog(data.answer_html || "");
     followupQuestion.value = "";
@@ -272,6 +298,118 @@ followupButton.addEventListener("click", async () => {
     followupButton.ariaBusy = "false";
   }
 });
+
+// 저장된 작업: 수동 저장, 목록, 열기(읽기 전용), 이어서 질문(결정적 재계산, LLM 호출 없음), 삭제
+function actionButton(label, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary compact";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function renderResultsList(items) {
+  resultsList.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty";
+    empty.textContent = "저장된 작업이 없습니다.";
+    resultsList.append(empty);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement("li");
+    const title = document.createElement("div");
+    title.className = "saved-title";
+    title.textContent = item.question_preview || "(질문 없음)";
+    const meta = document.createElement("div");
+    meta.className = "saved-meta";
+    meta.textContent = `${item.saved_at} · ${(item.api_names || []).join(", ")} · 후보 ${item.n_candidates}개 · DB ${item.snapshot_id}`;
+    const actions = document.createElement("div");
+    actions.className = "saved-actions";
+    actions.append(
+      actionButton("열기", () => openResult(item.id)),
+      actionButton("이어서 질문", () => resumeResult(item.id)),
+      actionButton("삭제", () => deleteResult(item.id)),
+    );
+    row.append(title, meta, actions);
+    resultsList.append(row);
+  }
+}
+
+async function refreshResults() {
+  try {
+    const data = await jsonRequest("/api/results");
+    renderResultsList(data.results || []);
+  } catch (error) {
+    renderResultsList([]);
+  }
+}
+
+async function openResult(id) {
+  try {
+    const data = await jsonRequest(`/api/results/${id}`);
+    resetConversation();
+    showResult(data);
+    showTurns(data.turns);
+    followupPanel.hidden = false;
+    setFollowupEnabled(false);        // 읽기 전용 — '이어서 질문'을 눌러야 대화가 열린다
+    message.textContent = `저장된 작업을 열었습니다 (${data.saved_at}). 이어서 질문하려면 목록의 '이어서 질문'을 누르세요.`;
+  } catch (error) {
+    message.textContent = describeError(error);
+  }
+}
+
+async function resumeResult(id) {
+  message.textContent = "저장된 요청으로 조성표를 다시 계산합니다(LLM 호출 없음)…";
+  try {
+    const data = await jsonRequest(`/api/results/${id}/resume`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({provider: provider.value, tier: tier.value}),
+    });
+    resetConversation();
+    showResult(data);
+    showTurns(data.turns);
+    conversationId = data.conversation_id;
+    followupPanel.hidden = false;
+    resultActions.hidden = false;
+    saveStatus.textContent = `저장본 ${id} 에서 이어서 질문합니다. 질의응답은 그 폴더에도 기록됩니다.`;
+    message.textContent = "이어서 질문할 수 있습니다.";
+  } catch (error) {
+    message.textContent = describeError(error);
+  }
+}
+
+async function deleteResult(id) {
+  try {
+    await jsonRequest(`/api/results/${id}`, {method: "DELETE"});
+    await refreshResults();
+  } catch (error) {
+    message.textContent = describeError(error);
+  }
+}
+
+saveButton.addEventListener("click", async () => {
+  if (!conversationId) return;
+  saveButton.disabled = true;
+  try {
+    const data = await jsonRequest("/api/results", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({conversation_id: conversationId}),
+    });
+    saveStatus.textContent = `저장됨 (${data.result_id}) · 위치: %LOCALAPPDATA%\\PhramaProto\\results`;
+    await refreshResults();
+  } catch (error) {
+    saveStatus.textContent = describeError(error);
+  } finally {
+    saveButton.disabled = false;
+  }
+});
+
+refreshResultsButton.addEventListener("click", refreshResults);
 
 applyTheme(document.documentElement.dataset.theme);
 populateModels();

@@ -24,9 +24,11 @@ function fakeElement(initial = {}) {
     async dispatch(type) {
       return listeners.get(type)?.();
     },
-    append(child) {
-      this.children.push(child);
-      if (child.selected) this.value = child.value;
+    append(...children) {
+      for (const child of children) {
+        this.children.push(child);
+        if (child.selected) this.value = child.value;
+      }
     },
     replaceChildren() {
       this.children = [];
@@ -38,7 +40,7 @@ function fakeElement(initial = {}) {
   }, initial);
 }
 
-function browserHarness({generatePayload, followupPayloads = []} = {}) {
+function browserHarness({generatePayload, followupPayloads = [], routes = {}} = {}) {
   const eventLog = [];
   const provider = fakeElement({value: "openai"});
   const tier = fakeElement({value: "normal"});
@@ -72,6 +74,11 @@ function browserHarness({generatePayload, followupPayloads = []} = {}) {
     "#logout": fakeElement(),
     "#theme-toggle": fakeElement({textContent: "화면: 시스템"}),
     "#print": fakeElement(),
+    "#result-actions": fakeElement({hidden: true}),
+    "#save-result": fakeElement(),
+    "#save-status": fakeElement(),
+    "#refresh-results": fakeElement(),
+    "#results-list": fakeElement(),
     "#followup-panel": fakeElement({hidden: true}),
     "#followup-question": fakeElement(),
     "#followup-log": fakeElement(),
@@ -155,6 +162,12 @@ function browserHarness({generatePayload, followupPayloads = []} = {}) {
   const fetchCalls = [];
   async function fetch(url, options = {}) {
     fetchCalls.push([url, options]);
+    const routeKey = `${options.method || "GET"} ${url}`;
+    if (routeKey in routes) {
+      const route = routes[routeKey];
+      const routed = typeof route === "function" ? route(options) : route;
+      return {ok: true, async json() { return routed; }};
+    }
     const payload = url === "/health"
       ? {
           status: "ok",
@@ -310,4 +323,43 @@ test("화면 색 토글은 시스템→밝게→어둡게로 순환하며 서버
   await harness.elements["#print"].dispatch("click");
   assert.ok(harness.eventLog.some(([event]) => event === "print"));
   assert.ok(harness.windowListeners.has("beforeprint") && harness.windowListeners.has("afterprint"));
+});
+
+test("저장 버튼은 대화를 저장하고 목록을 갱신하며, 열기는 읽기 전용으로·삭제는 목록에서 지운다", async () => {
+  const card = (label) => `<div class="card"><button class="download-xlsx" data-candidate-index="1" disabled></button>${label}</div>`;
+  const downloads = [{candidate_idx: 1, filename: "조성_후보_1.xlsx", content_base64: "WA=="}];
+  const resultId = "20261004T120000Z-aaaaaaaa";
+  const summary = {id: resultId, saved_at: "2026-10-04T12:00:00+00:00", question_preview: "아세트아미노펜 500 mg",
+                   api_names: ["acetaminophen"], n_candidates: 1, snapshot_id: "test"};
+  let deleted = false;
+  const harness = browserHarness({
+    generatePayload: {html: card("처음"), downloads, conversation_id: "a".repeat(32)},
+    routes: {
+      "POST /api/results": {result_id: resultId},
+      "GET /api/results": () => ({results: deleted ? [] : [summary]}),
+      [`GET /api/results/${resultId}`]: {id: resultId, saved_at: summary.saved_at, html: card("저장본"), downloads,
+        turns: [{role: "assistant", kind: "answer", text: "x", html: "<div class='card followup'>x</div>"}], resumable: true},
+      [`DELETE /api/results/${resultId}`]: () => { deleted = true; return {deleted: true}; },
+    },
+  });
+
+  await harness.elements["#generate"].dispatch("click");
+  assert.equal(harness.elements["#result-actions"].hidden, false);
+
+  await harness.elements["#save-result"].dispatch("click");
+  const [, saveOptions] = harness.fetchCalls.find(([url, options]) => url === "/api/results" && options.method === "POST");
+  assert.deepEqual(JSON.parse(saveOptions.body), {conversation_id: "a".repeat(32)});
+  assert.ok(harness.elements["#save-status"].textContent.includes("저장됨"));
+  assert.equal(harness.elements["#results-list"].children.length, 1);
+
+  const [openButton, , deleteButton] = harness.elements["#results-list"].children[0].children[2].children;
+  await openButton.dispatch("click");
+  assert.ok(harness.results.innerHTML.includes("저장본"));
+  assert.equal(harness.elements["#followup-log"].children.length, 1);
+  assert.equal(harness.elements["#followup-panel"].hidden, false);
+  assert.equal(harness.elements["#followup"].disabled, true);          // 열람만 — '이어서 질문' 전에는 입력 불가
+
+  await deleteButton.dispatch("click");
+  assert.equal(harness.elements["#results-list"].children.length, 1);
+  assert.equal(harness.elements["#results-list"].children[0].className, "empty");
 });

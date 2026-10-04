@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import os
 from collections.abc import Mapping
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -31,6 +32,9 @@ from pharma_proto.errors import (
     PREFERENCES_IO_ERROR,
     REQUEST_ERROR,
     REQUEST_FORM_ERROR,
+    RESULTS_IO_ERROR,
+    RESULTS_NOT_FOUND_ERROR,
+    RESULTS_SNAPSHOT_ERROR,
     AppError,
 )
 from pharma_proto.excel_export import candidate_workbook
@@ -38,9 +42,14 @@ from pharma_proto.knowledge.sqlite_repository import SQLiteKnowledgeRepository
 from pharma_proto.llm.catalog import MODEL_CATALOG, model_for
 from pharma_proto.llm.memory_keys import MemoryKeyStore
 from pharma_proto.llm.resilience import LLMFailure
-from pharma_proto.llm.schema import request_changes
+from pharma_proto.llm.schema import (
+    FormulationExplanation,
+    ParsedRequest,
+    request_changes,
+)
 from pharma_proto.llm.service import LLMService
 from pharma_proto.preferences import PreferenceStore
+from pharma_proto.results_store import ResultsStore
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -73,6 +82,19 @@ class _PreferencesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     theme: Literal["system", "light", "dark"]
+
+
+class _SaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversation_id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
+
+
+class _ResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["openai", "gemini", "claude"]
+    tier: Literal["cheap", "normal", "good"] = "normal"
 
 
 def _provider_status(store: MemoryKeyStore) -> dict[str, bool]:
@@ -128,6 +150,8 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
 
     conversations = ConversationStore()   # 후속 질문용 대화 상태 — 메모리에만, 로그아웃·종료 때 비운다
     preferences = PreferenceStore(local_root / "preferences.json")   # 테마 같은 비밀 아닌 설정만
+    css_text = (Path(__file__).resolve().parent / "static" / "app.css").read_text(encoding="utf-8")
+    results_store = ResultsStore(local_root / "results", css_text=css_text, app_version=__version__)
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config.update(TRUSTED_HOSTS=["127.0.0.1", "localhost"])
     app.extensions["knowledge_repository"] = repository
@@ -136,6 +160,7 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
     app.extensions["diagnostics"] = diagnostics
     app.extensions["conversation_store"] = conversations
     app.extensions["preferences"] = preferences
+    app.extensions["results_store"] = results_store
 
     @app.after_request
     def security_headers(response):
@@ -373,26 +398,156 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
                 for key, value in rendered.items():
                     setattr(conversation, key, value)
                 conversation.result_id = None
+            turn_html = followup_turn_html(body.question, changes, reply.note)
             conversation.add_turn("user", "question", body.question)
-            conversation.add_turn("assistant", "refine", "\n".join(changes) or "변경 없음")
+            conversation.add_turn("assistant", "refine", "\n".join(changes) or "변경 없음", html=turn_html)
             conversations.replace(conversation)
+            _sync_saved(conversation)
             return jsonify(
                 conversation_id=conversation.conversation_id,
                 action="refine",
                 changed=bool(changes),
                 html=conversation.html,
                 downloads=conversation.downloads,
-                answer_html=followup_turn_html(body.question, changes, reply.note),
+                answer_html=turn_html,
             )
+        answer_html = followup_answer_html(body.question, reply.answer)
         conversation.add_turn("user", "question", body.question)
-        conversation.add_turn("assistant", "answer", " ".join(item.text for item in reply.answer))
+        conversation.add_turn(
+            "assistant", "answer", " ".join(item.text for item in reply.answer), html=answer_html
+        )
         conversations.replace(conversation)
+        _sync_saved(conversation)
         return jsonify(
             conversation_id=conversation.conversation_id,
             action="answer",
             html=conversation.html,
             downloads=conversation.downloads,
-            answer_html=followup_answer_html(body.question, reply.answer),
+            answer_html=answer_html,
+        )
+
+    def _sync_saved(conversation) -> None:
+        """저장본과 연결된 대화면 질의응답 기록을 그 폴더에도 반영한다. 실패해도 응답은 그대로."""
+        if not conversation.result_id:
+            return
+        try:
+            results_store.append_turns(conversation.result_id, conversation.turns)
+        except OSError:
+            diagnostics.record(event="results_error", code=RESULTS_IO_ERROR)
+
+    @app.post("/api/results")
+    def save_result():
+        """현재 대화를 폴더로 저장한다(수동). 키는 넣지 않고, 응답에는 id 만(경로 없음)."""
+        body = _parse_body(_SaveRequest)
+        conversation = conversations.get(body.conversation_id)
+        if conversation is None:
+            raise AppError(CONVERSATION_ERROR, 404)
+        parsed = conversation.parsed_request
+        explanation = conversation.explanation
+        try:
+            result_id = results_store.save(
+                conversation_id=conversation.conversation_id,
+                question=conversation.question,
+                turns=conversation.turns,
+                parsed_request=parsed.model_dump(mode="json") if parsed is not None else None,
+                snapshot_id=_snapshot_id(),
+                provider=conversation.provider,
+                tier=conversation.tier,
+                model=model_for(conversation.provider, conversation.tier),
+                html=conversation.html,
+                downloads=conversation.downloads,
+                explanation=explanation.model_dump(mode="json") if explanation is not None else None,
+                explanation_error=conversation.explanation_error,
+                api_names=[a.name for a in getattr(conversation.spec, "apis", None) or []],
+                n_candidates=len(conversation.candidates),
+            )
+        except OSError:
+            raise AppError(RESULTS_IO_ERROR, 500) from None
+        conversation.result_id = result_id
+        conversations.replace(conversation)
+        return jsonify(result_id=result_id)
+
+    @app.get("/api/results")
+    def list_results():
+        return jsonify(results=[asdict(item) for item in results_store.list()])
+
+    @app.get("/api/results/<result_id>")
+    def get_result(result_id: str):
+        saved = results_store.load(result_id)
+        if saved is None:
+            raise AppError(RESULTS_NOT_FOUND_ERROR, 404)
+        return jsonify(
+            id=saved.id,
+            saved_at=saved.saved_at,
+            question=saved.question,
+            turns=saved.turns,
+            parsed_request=saved.parsed_request,
+            html=saved.html,
+            downloads=saved.downloads,
+            snapshot_id=saved.snapshot_id,
+            explanation_error=saved.explanation_error,
+            resumable=saved.parsed_request is not None and saved.snapshot_id == _snapshot_id(),
+        )
+
+    @app.delete("/api/results/<result_id>")
+    def delete_result(result_id: str):
+        try:
+            deleted = results_store.delete(result_id)
+        except OSError:
+            raise AppError(RESULTS_IO_ERROR, 500) from None
+        if not deleted:
+            raise AppError(RESULTS_NOT_FOUND_ERROR, 404)
+        return jsonify(deleted=True)
+
+    @app.post("/api/results/<result_id>/resume")
+    def resume_result(result_id: str):
+        """저장된 요청으로 조성을 결정적으로 다시 계산해 새 대화를 연다. LLM 은 부르지 않는다(해설은 저장본)."""
+        body = _parse_body(_ResumeRequest)
+        saved = results_store.load(result_id)
+        if saved is None:
+            raise AppError(RESULTS_NOT_FOUND_ERROR, 404)
+        if saved.parsed_request is None or saved.snapshot_id != _snapshot_id():
+            raise AppError(RESULTS_SNAPSHOT_ERROR, 409)   # 다른 DB 면 숫자가 달라질 수 있다 — 열람만
+        try:
+            parsed = ParsedRequest.model_validate(saved.parsed_request)
+        except ValidationError:
+            raise AppError(RESULTS_SNAPSHOT_ERROR, 409) from None
+        explanation = None
+        if saved.explanation:
+            try:
+                explanation = FormulationExplanation.model_validate(saved.explanation)
+            except ValidationError:
+                explanation = None
+        model = model_for(body.provider, body.tier)
+        spec = parsed.to_domain()
+        candidates = _generate_candidates(spec, provider=body.provider, model=model)
+        meta = {
+            "question": saved.question,
+            "generated_at": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M"),
+            "snapshot_id": _snapshot_id(),
+            "model": model,
+        }
+        html = results_html(spec, candidates, explanation, saved.explanation_error, meta=meta)
+        downloads = _downloads(candidates)
+        conversation = conversations.create(
+            provider=body.provider,
+            tier=body.tier,
+            question=saved.question,
+            parsed_request=parsed,
+            spec=spec,
+            candidates=candidates,
+            explanation=explanation,
+            explanation_error=saved.explanation_error,
+            html=html,
+            downloads=downloads,
+            turns=list(saved.turns),
+            result_id=saved.id,
+        )
+        return jsonify(
+            conversation_id=conversation.conversation_id,
+            html=html,
+            downloads=downloads,
+            turns=saved.turns,
         )
 
     @app.post("/api/logout")
