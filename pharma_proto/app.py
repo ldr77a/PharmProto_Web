@@ -15,12 +15,14 @@ from werkzeug.exceptions import HTTPException
 from generation.explanation import build_explanation_payload
 from generation.generation_loop import run_generation
 from generation.html_formatter import results_html
+from generation.oral_solid_profiles import UnsupportedDosageForm
 from pharma_proto import __version__
 from pharma_proto.diagnostics import SafeDiagnostics, configure_safe_logging
 from pharma_proto.errors import (
     APP_START_ERROR,
     LLM_KEY_ERROR,
     REQUEST_ERROR,
+    REQUEST_FORM_ERROR,
     AppError,
 )
 from pharma_proto.excel_export import candidate_workbook
@@ -56,7 +58,7 @@ def _parse_body(model_type):
     try:
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
-            raise ValueError
+            raise TypeError
         return model_type.model_validate(body)
     except (ValidationError, TypeError, ValueError):
         raise AppError(REQUEST_ERROR, 400) from None
@@ -149,6 +151,76 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             raise AppError(REQUEST_ERROR, 400) from None
         return jsonify(provider=body.provider, configured=True)
 
+    def _snapshot_id() -> str:
+        return str(repository.health()["snapshot_id"])
+
+    def _record_llm_failure(failure: LLMFailure, provider: str, model: str) -> None:
+        diagnostics.record(
+            event="llm_error",
+            code=failure.code,
+            provider=provider,
+            model=model,
+            snapshot_id=_snapshot_id(),
+            request_id=failure.request_id,
+            provider_code=failure.provider_code,
+            provider_status=failure.provider_status,
+            provider_reason=failure.provider_reason,
+        )
+
+    def _llm_failure(failure: LLMFailure, provider: str, model: str):
+        """LLM 호출 실패 → 코드만 담은 응답(본문·키·경로 없음)."""
+        _record_llm_failure(failure, provider, model)
+        return jsonify(error=failure.code), failure.status_code
+
+    def _generate_candidates(spec, *, provider: str, model: str):
+        """결정적 생성. 비고형 제형은 안내 코드로 거절한다(500 이 아니라 400)."""
+        try:
+            candidates = run_generation(spec, repository=repository, offline=True)
+        except UnsupportedDosageForm:
+            raise AppError(REQUEST_FORM_ERROR, 400) from None
+        diagnostics.record(
+            event="generation_complete",
+            provider=provider,
+            model=model,
+            snapshot_id=_snapshot_id(),
+        )
+        return candidates
+
+    def _explain_or_none(provider: str, tier: str, api_key: str, model: str, spec, candidates):
+        """해설층: 숫자는 DB 가 정했고 LLM 은 해석만 한다. 실패해도 표는 그대로 돌려준다."""
+        explain = getattr(llm_service, "explain", None)
+        if not candidates or not callable(explain):
+            return None, None
+        try:
+            explanation = explain(
+                provider,
+                tier,
+                api_key,
+                build_explanation_payload(spec, candidates, repository),
+            )
+        except LLMFailure as failure:
+            _record_llm_failure(failure, provider, model)
+            return None, failure.code
+        diagnostics.record(
+            event="explanation_complete",
+            provider=provider,
+            model=model,
+            snapshot_id=_snapshot_id(),
+        )
+        return explanation, None
+
+    def _downloads(candidates) -> list[dict[str, Any]]:
+        return [
+            {
+                "candidate_idx": candidate.idx,
+                "filename": f"조성_후보_{candidate.idx}.xlsx",
+                "content_base64": base64.b64encode(
+                    candidate_workbook(candidate)
+                ).decode("ascii"),
+            }
+            for candidate in candidates
+        ]
+
     @app.post("/api/generate")
     def generate():
         body = _parse_body(_GenerateRequest)
@@ -164,69 +236,14 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
                 body.question,
             )
         except LLMFailure as failure:
-            diagnostics.record(
-                event="llm_error",
-                code=failure.code,
-                provider=body.provider,
-                model=model,
-                snapshot_id=str(repository.health()["snapshot_id"]),
-                request_id=failure.request_id,
-                provider_code=failure.provider_code,
-                provider_status=failure.provider_status,
-                provider_reason=failure.provider_reason,
-            )
-            return jsonify(error=failure.code), failure.status_code
-        candidates = run_generation(spec, repository=repository, offline=True)
-        diagnostics.record(
-            event="generation_complete",
-            provider=body.provider,
-            model=model,
-            snapshot_id=str(repository.health()["snapshot_id"]),
+            return _llm_failure(failure, body.provider, model)
+        candidates = _generate_candidates(spec, provider=body.provider, model=model)
+        explanation, explanation_error = _explain_or_none(
+            body.provider, body.tier, api_key, model, spec, candidates
         )
-        # 해설층: 숫자는 위에서 DB 가 정했고, LLM 은 해석만 한다. 실패해도 표는 그대로 돌려준다.
-        explanation = None
-        explanation_error = None
-        explain = getattr(llm_service, "explain", None)
-        if candidates and callable(explain):
-            try:
-                explanation = explain(
-                    body.provider,
-                    body.tier,
-                    api_key,
-                    build_explanation_payload(spec, candidates, repository),
-                )
-                diagnostics.record(
-                    event="explanation_complete",
-                    provider=body.provider,
-                    model=model,
-                    snapshot_id=str(repository.health()["snapshot_id"]),
-                )
-            except LLMFailure as failure:
-                explanation_error = failure.code
-                diagnostics.record(
-                    event="llm_error",
-                    code=failure.code,
-                    provider=body.provider,
-                    model=model,
-                    snapshot_id=str(repository.health()["snapshot_id"]),
-                    request_id=failure.request_id,
-                    provider_code=failure.provider_code,
-                    provider_status=failure.provider_status,
-                    provider_reason=failure.provider_reason,
-                )
-        downloads = [
-            {
-                "candidate_idx": candidate.idx,
-                "filename": f"조성_후보_{candidate.idx}.xlsx",
-                "content_base64": base64.b64encode(
-                    candidate_workbook(candidate)
-                ).decode("ascii"),
-            }
-            for candidate in candidates
-        ]
         return jsonify(
             html=results_html(spec, candidates, explanation, explanation_error),
-            downloads=downloads,
+            downloads=_downloads(candidates),
         )
 
     @app.errorhandler(AppError)

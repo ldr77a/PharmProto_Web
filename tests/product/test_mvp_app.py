@@ -6,8 +6,8 @@ import pytest
 
 from generation.input_parser import build_spec
 from pharma_proto.errors import AppError
-from pharma_proto.llm.resilience import LLMFailure
 from pharma_proto.llm.memory_keys import MemoryKeyStore
+from pharma_proto.llm.resilience import LLMFailure
 from tests.product.snapshot_fixtures import write_test_snapshot
 
 
@@ -142,6 +142,26 @@ def test_app_rejects_extra_request_fields_and_missing_key(tmp_path, monkeypatch)
     assert invalid.get_json() == {"error": "REQUEST-001"}
     assert missing.status_code == 400
     assert missing.get_json() == {"error": "LLM-KEY-001"}
+
+
+class _SyrupLLMService(FakeLLMService):
+    def parse(self, provider, tier, api_key, question):
+        return build_spec([("acetaminophen", 500.0)], {}, dosage_form="syrup", n_candidates=1)
+
+
+def test_unsupported_dosage_form_returns_request_form_code(tmp_path, monkeypatch):
+    app = _app(tmp_path, monkeypatch, service=_SyrupLLMService())
+    client = app.test_client()
+    client.post("/api/key", json={"provider": "openai", "api_key": "tempo" + "rary"})
+
+    response = client.post(
+        "/api/generate",
+        json={"provider": "openai", "tier": "normal", "question": "아세트아미노펜 시럽"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "REQUEST-FORM-001"}
+    assert client.get("/api/diagnostics").get_json()["recent_error_codes"] == ["REQUEST-FORM-001"]
 
 
 def test_all_responses_have_local_security_headers(tmp_path, monkeypatch):

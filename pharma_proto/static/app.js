@@ -69,6 +69,29 @@ function enableDownloads(downloads) {
   }
 }
 
+// 서버는 오류 코드만 돌려준다(본문·경로·키 없음). 화면에서는 코드 옆에 한 줄 설명을 붙인다.
+const ERROR_MESSAGES = {
+  "REQUEST-001": "요청 형식이 올바르지 않습니다.",
+  "REQUEST-FORM-001": "현재는 경구 고형제(정제·캡슐·과립·산제)만 지원합니다.",
+  "LLM-KEY-001": "API 키가 설정되지 않았습니다.",
+  "LLM-AUTH-001": "API 키가 거부되었습니다. 키를 확인해 주세요.",
+  "LLM-RATE-001": "API 호출 한도에 걸렸습니다. 잠시 뒤 다시 시도해 주세요.",
+  "LLM-TIMEOUT-001": "AI 응답이 시간 안에 오지 않았습니다. 다시 시도해 주세요.",
+  "LLM-UPSTREAM-001": "AI 서비스에 연결하지 못했습니다.",
+  "LLM-RESPONSE-001": "AI 응답을 해석하지 못했습니다. 질문을 바꿔 다시 시도해 주세요.",
+  "CONVERSATION-001": "대화가 만료되었습니다. 조성표를 새로 생성해 주세요.",
+  "RESULTS-001": "저장된 작업을 찾을 수 없습니다.",
+  "RESULTS-IO-001": "저장 폴더에 쓰거나 지울 수 없습니다.",
+  "RESULTS-SNAPSHOT-001": "다른 데이터베이스 버전으로 만든 결과라 이어서 질문할 수 없습니다. 열람과 다운로드만 가능합니다.",
+  "APP-START-001": "앱 내부 오류가 발생했습니다.",
+};
+
+function describeError(error) {
+  const code = error && error.message ? error.message : "APP-START-001";
+  const text = ERROR_MESSAGES[code];
+  return text ? `${text} (${code})` : code;
+}
+
 async function jsonRequest(url, options = {}) {
   const response = await fetch(url, options);
   const data = await response.json();
@@ -82,7 +105,7 @@ async function refreshHealth() {
     document.querySelector("#health").textContent =
       `${data.status} · 앱 ${data.app_version} · DB ${data.snapshot_id} / schema ${data.schema_version}`;
   } catch (error) {
-    document.querySelector("#health").textContent = error.message;
+    document.querySelector("#health").textContent = describeError(error);
   }
 }
 
@@ -98,7 +121,7 @@ document.querySelector("#save-key").addEventListener("click", async () => {
     showResearchApp();
   } catch (error) {
     apiKey.value = "";
-    setupMessage.textContent = error.message;
+    setupMessage.textContent = describeError(error);
     apiKey.focus();
   }
 });
@@ -127,7 +150,7 @@ generateButton.addEventListener("click", async () => {
     reviewNotice.hidden = results.querySelector(".card") === null;
     message.textContent = "완료";
   } catch (error) {
-    message.textContent = error.message;
+    message.textContent = describeError(error);
   } finally {
     generateButton.disabled = false;
     generateButton.ariaBusy = "false";
