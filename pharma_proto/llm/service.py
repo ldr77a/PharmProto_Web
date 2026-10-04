@@ -14,7 +14,13 @@ from pharma_proto.llm.schema import FormulationExplanation, ParsedRequest
 SYSTEM_INSTRUCTION = (
     "Extract the pharmaceutical formulation request into the supplied schema. "
     "Translate ingredient names to English generic names. Do not add fields outside the schema "
-    "and do not invent excipients the user did not provide."
+    "and do not invent excipients the user did not provide. "
+    "When the user states an amount for an excipient, record it in `amounts` as "
+    "{ingredient, mg or pct} using exactly the English name you put in its role list, and also "
+    "list that ingredient under its role (binder, disintegrant, diluent, lubricant or "
+    "additional_roles). Put API doses in apis[].dose_mg and a stated total tablet or capsule "
+    "weight in target_total_mg. Never invent amounts; leave a field empty when the user did not "
+    "state it."
 )
 
 EXPLAIN_INSTRUCTION = (
@@ -106,6 +112,18 @@ def _gemini_response_schema() -> dict[str, Any]:
                         },
                     },
                     "required": ["role"],
+                },
+            },
+            "amounts": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "ingredient": {"type": "STRING"},
+                        "mg": {"type": "NUMBER"},
+                        "pct": {"type": "NUMBER"},
+                    },
+                    "required": ["ingredient"],
                 },
             },
             "process": {"type": "STRING"},
@@ -315,6 +333,25 @@ class LLMService:
             sleeper=self._sleeper,
         )
 
+    def parse_request(
+        self,
+        provider: str,
+        tier: str,
+        api_key: str,
+        question: str,
+    ) -> ParsedRequest:
+        """질문 → 구조화 요청(ParsedRequest). 후속 질문이 이전 요청을 고쳐 쓸 수 있게 스키마 객체를 돌려준다."""
+        model = model_for(provider, tier)
+        key = api_key.strip()
+        text = question.strip()
+        if not key or not text or len(text) > 4000:
+            raise ValueError("invalid LLM request")
+        return run_with_retry(
+            lambda: self._parse_once(provider, model, key, text),
+            policy=self._policy,
+            sleeper=self._sleeper,
+        )
+
     def parse(
         self,
         provider: str,
@@ -322,17 +359,7 @@ class LLMService:
         api_key: str,
         question: str,
     ):
-        model = model_for(provider, tier)
-        key = api_key.strip()
-        text = question.strip()
-        if not key or not text or len(text) > 4000:
-            raise ValueError("invalid LLM request")
-        parsed = run_with_retry(
-            lambda: self._parse_once(provider, model, key, text),
-            policy=self._policy,
-            sleeper=self._sleeper,
-        )
-        return parsed.to_domain()
+        return self.parse_request(provider, tier, api_key, question).to_domain()
 
 
 __all__ = ["EXPLAIN_INSTRUCTION", "SYSTEM_INSTRUCTION", "LLMService"]

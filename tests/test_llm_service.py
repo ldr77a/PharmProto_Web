@@ -54,6 +54,7 @@ class _RecordingClaudeMessages:
                 "apis": [{"name": "Acetaminophen", "dose_mg": 500}],
                 "dosage_form": "tablet",
                 "disintegrant": ["Croscarmellose sodium"],
+                "amounts": [{"ingredient": "Croscarmellose sodium", "pct": 5}],
                 "release_profile": "immediate release",
                 "n_candidates": 3,
             }
@@ -150,9 +151,41 @@ def test_claude_parses_with_structured_output_not_forced_tools() -> None:
     assert formulation.apis[0].name == "Acetaminophen"
     assert formulation.apis[0].dose_mg == 500
     assert formulation.excipient_choices["disintegrant"] == ["croscarmellose sodium"]
+    assert formulation.user_amounts["croscarmellose sodium"].pct == 5
     assert formulation.release_profile == "immediate release"
     assert client.messages.output_format.__name__ == "ParsedRequest"
     assert "tool_choice" not in client.messages.kwargs and "tools" not in client.messages.kwargs
+
+
+def test_parse_request_returns_schema_object_for_follow_up_edits() -> None:
+    from pharma_proto.llm.schema import ParsedRequest
+
+    client = _RecordingClaudeClient()
+    service = LLMService(
+        client_factories={"claude": lambda *args, **kwargs: client},
+        policy=RetryPolicy(max_attempts=1),
+    )
+
+    parsed = service.parse_request("claude", "normal", "test-key", "아세트아미노펜 500 mg 정제")
+
+    assert isinstance(parsed, ParsedRequest)
+    assert parsed.amounts[0].ingredient == "Croscarmellose sodium"
+    assert parsed.to_domain().apis[0].dose_mg == 500
+
+
+def test_gemini_schema_declares_amounts() -> None:
+    client = _RecordingGeminiClient()
+    service = LLMService(
+        client_factories={"gemini": lambda *args, **kwargs: client},
+        policy=RetryPolicy(max_attempts=1),
+    )
+
+    service.parse("gemini", "normal", "test-key", "아세트아미노펜 500 mg 정제, MCC 40%")
+
+    amounts = client.models.submitted_schema["properties"]["amounts"]
+    assert amounts["type"] == "ARRAY"
+    assert set(amounts["items"]["properties"]) == {"ingredient", "mg", "pct"}
+    assert amounts["items"]["required"] == ["ingredient"]
 
 
 def _payload() -> dict:

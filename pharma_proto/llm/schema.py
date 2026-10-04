@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from generation.input_parser import FormulationSpec, build_spec
 from generation.oral_solid_profiles import canonical_role
@@ -26,6 +26,36 @@ class ParsedRoleChoice(BaseModel):
     ingredients: list[IngredientName] = Field(default_factory=list, max_length=20)
 
 
+class ParsedAmount(BaseModel):
+    """사용자가 적은 성분별 분량. mg 또는 % 중 하나는 있어야 한다.
+
+    Gemini 구조화 출력은 nullable 을 못 쓰므로 '없음'이 0 으로 올 수 있다 → 0 은 없음으로 본다.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ingredient: IngredientName
+    mg: float | None = Field(default=None, gt=0, le=1_000_000)
+    pct: float | None = Field(default=None, gt=0, lt=100)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _absent_if_zero(cls, data: object) -> object:
+        if isinstance(data, dict):
+            cleaned = dict(data)
+            for key in ("mg", "pct"):
+                if key in cleaned and cleaned[key] in (0, 0.0, "", None):
+                    cleaned.pop(key)
+            return cleaned
+        return data
+
+    @model_validator(mode="after")
+    def _one_required(self) -> ParsedAmount:
+        if self.mg is None and self.pct is None:
+            raise ValueError("amount needs mg or pct")
+        return self
+
+
 class ParsedRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -36,6 +66,7 @@ class ParsedRequest(BaseModel):
     diluent: list[IngredientName] = Field(default_factory=list, max_length=20)
     lubricant: list[IngredientName] = Field(default_factory=list, max_length=20)
     additional_roles: list[ParsedRoleChoice] = Field(default_factory=list, max_length=40)
+    amounts: list[ParsedAmount] = Field(default_factory=list, max_length=40)
     process: str = Field(default="", max_length=500)
     release_profile: str = Field(default="", max_length=200)
     n_candidates: int = Field(default=3, ge=1, le=5)
@@ -60,6 +91,7 @@ class ParsedRequest(BaseModel):
             release_profile=self.release_profile,
             n_candidates=self.n_candidates,
             target_total_mg=self.target_total_mg,
+            amounts={item.ingredient: (item.mg, item.pct) for item in self.amounts},
         )
 
 
@@ -123,5 +155,5 @@ class FormulationExplanation(BaseModel):
 
 __all__ = [
     "CandidateExplanation", "ExplanationItem", "FormulationExplanation", "IngredientNote",
-    "ParsedAPI", "ParsedRequest", "ParsedRoleChoice",
+    "ParsedAPI", "ParsedAmount", "ParsedRequest", "ParsedRoleChoice",
 ]

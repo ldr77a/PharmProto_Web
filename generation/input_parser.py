@@ -16,6 +16,14 @@ class APISpec:
     dose_mg: float | None = None
 
 
+@dataclass(frozen=True)
+class AmountSpec:
+    """사용자가 적은 성분별 분량. 둘 다 있으면 pct 를 쓴다(총중량 없이도 확정되므로)."""
+
+    mg: float | None = None
+    pct: float | None = None
+
+
 @dataclass
 class FormulationSpec:
     apis: list[APISpec]
@@ -28,6 +36,8 @@ class FormulationSpec:
     target_total_mg: float | None = None
     profile_id: str = ""
     selection_sources: dict[str, str] = field(default_factory=dict)
+    # 정규화된 성분명(casefold) → 사용자 지정 분량. 배분 때 후보별 역할 키로 옮겨 쓴다.
+    user_amounts: dict[str, AmountSpec] = field(default_factory=dict)
 
 
 # 한글/상표 → 영문 canonical (canonical_base 가 다시 통합). 최소 사전(확장 가능).
@@ -71,16 +81,34 @@ def normalize_ingredient(name: str) -> str:
 
 
 def build_spec(apis, excipients: dict[str, list[str]], *, dosage_form="tablet",
-               process="", release_profile="", n_candidates=3, target_total_mg=None) -> FormulationSpec:
-    """구조화 입력으로 스펙 구성(성분명 정규화 포함). 테스트·데모용 결정적 경로."""
+               process="", release_profile="", n_candidates=3, target_total_mg=None,
+               amounts=None) -> FormulationSpec:
+    """구조화 입력으로 스펙 구성(성분명 정규화 포함). 테스트·데모용 결정적 경로.
+
+    amounts: {성분명: (mg, pct) | AmountSpec}. 성분명은 역할 리스트와 같은 규칙으로 정규화되므로
+    같은 성분이면 같은 키가 된다. API 이름과 겹치는 mg 는 그 API 의 용량이 비어 있을 때 채운다.
+    """
     api_specs = [a if isinstance(a, APISpec) else APISpec(normalize_ingredient(a[0]),
                  a[1] if len(a) > 1 else None) if isinstance(a, tuple)
                  else APISpec(normalize_ingredient(a)) for a in apis]
     norm_ex = {fn: [normalize_ingredient(x) for x in xs] for fn, xs in excipients.items()}
+    user_amounts: dict[str, AmountSpec] = {}
+    for raw_name, value in (amounts or {}).items():
+        amount = value if isinstance(value, AmountSpec) else AmountSpec(*value)
+        if amount.mg is None and amount.pct is None:
+            continue
+        user_amounts[normalize_ingredient(raw_name).casefold()] = amount
+    for api in api_specs:
+        amount = user_amounts.get(api.name.casefold())
+        if amount is not None and amount.mg is not None:
+            if api.dose_mg is None:
+                api.dose_mg = amount.mg
+            user_amounts.pop(api.name.casefold())
     return FormulationSpec(apis=api_specs, dosage_form=dosage_form,
                            excipient_choices=norm_ex, process=process,
                            release_profile=release_profile,
-                           n_candidates=n_candidates, target_total_mg=target_total_mg)
+                           n_candidates=n_candidates, target_total_mg=target_total_mg,
+                           user_amounts=user_amounts)
 
 
 def parse_command_llm(text: str) -> FormulationSpec:

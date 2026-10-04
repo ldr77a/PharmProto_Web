@@ -103,6 +103,16 @@ class _FailingLLMService:
         raise self._failure
 
 
+class _ParsedRequestLLMService:
+    """실제 ParsedRequest → to_domain() 경로를 타는 가짜(분량 지정 포함). 해설은 건너뛴다."""
+
+    def __init__(self, parsed) -> None:
+        self._parsed = parsed
+
+    def parse(self, provider: str, tier: str, api_key: str, question: str):
+        return self._parsed.to_domain()
+
+
 @pytest.fixture
 def app_factory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
@@ -282,6 +292,36 @@ def test_generate_returns_one_real_xlsx_download_per_candidate(
         100.0,
         "총중량 600mg",
     ]
+
+
+def test_generate_echoes_parsed_request_and_user_amounts(app_factory) -> None:
+    """피드백 3번: 사용자가 적은 분량·총중량이 표에 그대로 들어가고 '요청 해석'에 에코된다(실제 스냅샷)."""
+    from pharma_proto.llm.schema import ParsedRequest
+
+    parsed = ParsedRequest.model_validate({
+        "apis": [{"name": "acetaminophen", "dose_mg": 500}],
+        "disintegrant": ["croscarmellose sodium"],
+        "amounts": [{"ingredient": "croscarmellose sodium", "pct": 4}],
+        "target_total_mg": 700,
+        "n_candidates": 1,
+    })
+    client = app_factory(llm_service=_ParsedRequestLLMService(parsed)).test_client()
+    assert client.post("/api/key", json={"provider": "openai", "api_key": "test-key"}).status_code == 200
+
+    response = client.post("/api/generate", json={
+        "provider": "openai", "tier": "normal",
+        "question": "아세트아미노펜 500 mg, 크로스카르멜로스나트륨 4%, 총 700 mg 정제",
+    })
+
+    assert response.status_code == 200
+    html = response.get_json()["html"]
+    assert "요청 해석" in html
+    assert "Acetaminophen 500 mg (사용자 지정)" in html
+    assert "700 mg (사용자 지정)" in html
+    assert "Croscarmellose sodium 4%" in html                       # 지정 분량 에코
+    assert "4.00</td><td class='ev '>사용자 지정</td>" in html       # 표의 % 와 근거 라벨
+    assert "총중량 700mg" in html
+    assert "미반영 분량" not in html
 
 
 def test_generate_logs_safe_provider_diagnostics(app_factory, tmp_path: Path) -> None:

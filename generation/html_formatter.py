@@ -23,7 +23,8 @@ _FUNC_KO = {"api": "API", "binder": "결합제", "disintegrant": "붕해제",
             "chelating_agent": "킬레이트제", "sustained_release_agent": "방출조절제",
             "granulation_aid": "과립화보조제", "moisture_control_agent": "수분조절제"}
 _SRC_KO = {
-    "user": ("사용자 지정", False), "hpe6": ("HPE6 용도범위", True),
+    "user": ("사용자 지정", False), "user_adjusted": ("사용자 지정→잔여 조정", False),
+    "hpe6": ("HPE6 용도범위", True),
     "hpe6+kg": ("HPE6∩KG 범위", True),
     "hpe6+kg_role": ("HPE6∩KG 역할별 범위", True),
     "kg": ("KG 범위", True),
@@ -298,12 +299,83 @@ def candidate_html(cand, explanation=None) -> str:
     </div>"""
 
 
+def _amount_text(name: str, amount) -> str:
+    if getattr(amount, "pct", None) is not None:
+        return f"{_title_en(name)} {amount.pct:g}%"
+    return f"{_title_en(name)} {amount.mg:g} mg"
+
+
+def _api_summary(spec, candidates) -> str:
+    """API 와 확정 용량(출처 포함). 용량은 첫 후보의 DoseResult 에서 읽는다(KG·표준사전 폴백 반영)."""
+    doses = list(getattr(candidates[0], "doses", None) or []) if candidates else []
+    parts = []
+    for api in getattr(spec, "apis", None) or []:
+        dose = next((d for d in doses if d.name.casefold() == api.name.casefold()), None)
+        if dose is not None and dose.mg:
+            parts.append(f"{_title_en(api.name)} {dose.mg:g} mg ({dose.note})")
+        elif getattr(api, "dose_mg", None):
+            parts.append(f"{_title_en(api.name)} {api.dose_mg:g} mg (사용자 지정)")
+        else:
+            parts.append(f"{_title_en(api.name)} (용량 미상)")
+    return ", ".join(parts) or "-"
+
+
+def request_summary_html(spec, candidates) -> str:
+    """LLM 이 읽어 낸 요청을 그대로 보여 준다 — 잘못 읽힌 성분·분량을 사용자가 바로 알아채게."""
+    items: list[tuple[str, str, bool]] = [("주성분", _api_summary(spec, candidates), False)]
+    items.append(("제형", getattr(spec, "dosage_form", "") or "-", False))
+    if getattr(spec, "process", ""):
+        items.append(("공정", spec.process, False))
+    if getattr(spec, "release_profile", ""):
+        items.append(("방출", spec.release_profile, False))
+    total = getattr(spec, "target_total_mg", None)
+    items.append(("총중량", f"{total:g} mg (사용자 지정)" if total else "자동 산출(API 함량 기준)", False))
+    items.append(("후보 수", str(getattr(spec, "n_candidates", None) or len(candidates)), False))
+
+    sources = getattr(spec, "selection_sources", None) or {}
+    choices = getattr(spec, "excipient_choices", None) or {}
+    named = [
+        f"{_FUNC_KO.get(role, role)}: {', '.join(_title_en(n) for n in names)}"
+        for role, names in choices.items()
+        if names and sources.get(role, "user") == "user"
+    ]
+    if named:
+        items.append(("지정 성분", " · ".join(named), False))
+
+    amounts = getattr(spec, "user_amounts", None) or {}
+    if amounts:
+        reflected = {
+            a.name.casefold()
+            for c in candidates
+            for a in getattr(c, "allocs", None) or []
+            if a.source in ("user", "user_adjusted")
+        }
+        applied = [_amount_text(k, v) for k, v in amounts.items() if k in reflected]
+        missing = [_amount_text(k, v) for k, v in amounts.items() if k not in reflected]
+        if applied:
+            items.append(("지정 분량", ", ".join(applied), False))
+        if missing:
+            items.append((
+                "미반영 분량",
+                ", ".join(missing) + " — 어느 후보에도 들어가지 않은 성분입니다. "
+                "역할(예: 붕해제)을 함께 적어 주세요.",
+                True,
+            ))
+
+    rows = "".join(
+        f"<dt>{html.escape(label)}</dt><dd{' class=\"missing\"' if warn else ''}>{html.escape(value)}</dd>"
+        for label, value, warn in items
+    )
+    return f"<div class='card request-summary'><h4>요청 해석</h4><dl>{rows}</dl></div>"
+
+
 def results_html(spec, candidates, explanation=None, explanation_error: str | None = None) -> str:
     if not candidates:
-        return (
-            "<div class='result-error'>유효한 조성 후보가 없습니다. "
-            "총중량과 성분 함량 제약을 확인하세요.</div>"
-        )
+        hint = "총중량과 성분 함량 제약을 확인하세요."
+        if getattr(spec, "user_amounts", None) or getattr(spec, "target_total_mg", None):
+            hint = ("지정한 총중량·분량으로는 희석제 잔여가 남지 않습니다. "
+                    "총중량을 늘리거나 지정 분량을 줄여 다시 요청하세요.")
+        return f"<div class='result-error'>유효한 조성 후보가 없습니다. {hint}</div>"
     apis = ", ".join(_title_en(a.name) for a in spec.apis)
     meta = (f"API: <b>{html.escape(apis)}</b> · 제형: {html.escape(spec.dosage_form)}"
             + (f" · 공정: {html.escape(spec.process)}" if spec.process else ""))
@@ -322,5 +394,6 @@ def results_html(spec, candidates, explanation=None, explanation_error: str | No
         )
     return (
         f"<div class='meta'>{meta} · 후보 {len(candidates)}개</div>"
+        + request_summary_html(spec, candidates)
         + notice + explanation_header_html(explanation) + cards
     )

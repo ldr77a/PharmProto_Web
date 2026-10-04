@@ -100,6 +100,46 @@ def _adjust_total(total: float, gate_out: dict, allocs: list) -> float | None:
     return None
 
 
+def _user_amounts_for_pick(spec, pick: dict) -> tuple[dict[str, float], dict[str, float]]:
+    """성분 키의 사용자 분량(spec.user_amounts)을 이 후보의 역할 키로 옮긴다(% 와 mg 를 따로)."""
+    amounts = getattr(spec, "user_amounts", None) or {}
+    pcts: dict[str, float] = {}
+    mgs: dict[str, float] = {}
+    for role, name in pick.items():
+        amount = amounts.get(name.casefold())
+        if amount is None:
+            continue
+        if amount.pct is not None:
+            pcts[role] = float(amount.pct)
+        elif amount.mg is not None:
+            mgs[role] = float(amount.mg)
+    return pcts, mgs
+
+
+def _user_range_violations(gate_out: dict, allocs: list) -> list[str] | None:
+    """하드 실패가 게이트1 뿐이고 그 위반이 전부 사용자 지정 분량이면 그 세부 줄들을 돌려준다.
+
+    사용자가 적은 값은 바꾸지 않으므로 '미해결' 대신 '조건부 후보'로 내리고 검토를 요청한다.
+    다른 하드 실패가 섞여 있거나 자동 배분 성분의 위반이면 None(미해결 유지).
+    """
+    hard = gate_out.get("hard_fails") or []
+    if not hard or any(not r.gate.startswith("게이트1") for r in hard):
+        return None
+    user_names = [a.name.casefold() for a in allocs if a.source in ("user", "user_adjusted")]
+    if not user_names:
+        return None
+    violations = [
+        str(detail) for detail in hard[0].details
+        if "초과" in str(detail) or "미만" in str(detail)
+    ]
+    if not violations:
+        return None
+    for line in violations:
+        if not any(line.casefold().startswith(f"{name} ") for name in user_names):
+            return None
+    return violations
+
+
 def run_generation(
     spec,
     *,
@@ -118,6 +158,9 @@ def run_generation(
         if not pick:
             break
         total = spec.target_total_mg
+        user_pcts, user_mgs = _user_amounts_for_pick(spec, pick)
+        # 사용자가 총중량이나 희석제 분량을 정했으면 총중량을 흔들지 않는다(재배분 재시도 없음).
+        total_fixed = total is not None or "diluent" in user_pcts or "diluent" in user_mgs
         cand = None
         for attempt in range(MAX_RETRIES + 1):
             try:
@@ -126,6 +169,8 @@ def run_generation(
                     pick,
                     repository=repository,
                     target_total_mg=total,
+                    user_pcts=user_pcts,
+                    user_mgs=user_mgs,
                     dosage_form=spec.dosage_form,
                 )
             except InfeasibleAllocationError:
@@ -138,6 +183,16 @@ def run_generation(
             gate_out = run_pipeline(fi, repository=repository, offline=offline)
             status = "unresolved" if gate_out["hard_fails"] else (
                 "warning" if gate_out["warnings"] else "pass")
+            user_notes: list[str] = []
+            if status == "unresolved":
+                user_violations = _user_range_violations(gate_out, allocs)
+                if user_violations:
+                    # 사용자 값은 바꾸지 않는다 — 칩에는 게이트1 실패가 그대로 남고 배지만 '조건부'.
+                    status = "warning"
+                    user_notes.append(
+                        f"게이트1: 사용자 지정 분량 {len(user_violations)}건이 KG 범위 밖 — "
+                        f"지정값 유지, 검토 필요: {user_violations[0]}"
+                    )
             source_labels = {
                 "kg": "DB 근거",
                 "kg_role": "DB 역할별 근거",
@@ -159,11 +214,14 @@ def run_generation(
                 total_mg,
                 gate_out,
                 status,
-                notes=list(warns) + selection_notes,
+                notes=list(warns) + user_notes + selection_notes,
                 retries=attempt,
                 evidence_by_ingredient=_evidence_for_components(repository, comps),
             )
             if status != "unresolved":
+                break
+            if total_fixed:
+                cand.notes.append("사용자 지정 총중량·분량 유지 — 재배분 없이 게이트 결과를 그대로 보고")
                 break
             new_total = _adjust_total(total_mg, gate_out, allocs)
             if new_total is None or new_total == total:

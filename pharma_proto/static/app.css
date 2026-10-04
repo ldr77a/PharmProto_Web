@@ -181,6 +181,14 @@ details { margin-top: 14px; }
 .refs { color: var(--text-muted); font-size: 12px; margin-left: 4px; }
 .caution { color: var(--warn); font-size: 13px; margin-top: 4px; font-weight: 600; }
 
+/* 요청 해석 — LLM 이 읽어 낸 요청의 에코(잘못 읽힌 성분·분량을 바로 알아채게) */
+.request-summary { padding: 14px 20px; }
+.request-summary h4 { margin: 0 0 8px; font-size: 15px; color: var(--primary); }
+.request-summary dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+.request-summary dt { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+.request-summary dd { margin: 0; overflow-wrap: anywhere; }
+.request-summary dd.missing { color: var(--warn); font-weight: 600; }
+
 @media (max-width: 1020px) {
   .research-layout { grid-template-columns: minmax(0, 960px); }
   .gate-sidebar { position: static; }
