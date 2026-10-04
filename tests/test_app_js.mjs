@@ -70,6 +70,8 @@ function browserHarness({generatePayload, followupPayloads = []} = {}) {
     "#health": fakeElement(),
     "#save-key": fakeElement(),
     "#logout": fakeElement(),
+    "#theme-toggle": fakeElement({textContent: "화면: 시스템"}),
+    "#print": fakeElement(),
     "#followup-panel": fakeElement({hidden: true}),
     "#followup-question": fakeElement(),
     "#followup-log": fakeElement(),
@@ -111,10 +113,24 @@ function browserHarness({generatePayload, followupPayloads = []} = {}) {
     },
   };
 
+  const documentElement = fakeElement({dataset: {theme: "system"}});
+  const windowListeners = new Map();
+  const window = {
+    print() {
+      eventLog.push(["print"]);
+    },
+    addEventListener(type, listener) {
+      windowListeners.set(type, listener);
+    },
+  };
   const document = {
     body,
+    documentElement,
     querySelector(selector) {
       return elements[selector];
+    },
+    querySelectorAll() {
+      return [];
     },
     createElement(tag) {
       if (tag === "option") return fakeElement({selected: false});
@@ -159,6 +175,7 @@ function browserHarness({generatePayload, followupPayloads = []} = {}) {
   let urlIndex = 0;
   const context = vm.createContext({
     document,
+    window,
     fetch,
     console,
     Blob,
@@ -180,7 +197,7 @@ function browserHarness({generatePayload, followupPayloads = []} = {}) {
   });
   vm.runInContext(appSource, context);
 
-  return {elements, eventLog, fetchCalls, results};
+  return {elements, eventLog, fetchCalls, results, documentElement, windowListeners};
 }
 
 test("API 확인 후 선택한 전체 모델명과 연구 화면을 표시한다", async () => {
@@ -271,4 +288,26 @@ test("후속 질문: refine 이면 결과를 교체하고 answer 면 로그에�
   await harness.elements["#logout"].dispatch("click");
   assert.equal(harness.elements["#followup-panel"].hidden, true);
   assert.equal(harness.elements["#followup-log"].children.length, 0);
+});
+
+test("화면 색 토글은 시스템→밝게→어둡게로 순환하며 서버에 저장하고, 인쇄 버튼은 window.print 를 부른다", async () => {
+  const harness = browserHarness();
+  assert.equal(harness.elements["#theme-toggle"].textContent, "화면: 시스템");
+
+  await harness.elements["#theme-toggle"].dispatch("click");
+
+  assert.equal(harness.documentElement.dataset.theme, "light");
+  assert.equal(harness.elements["#theme-toggle"].textContent, "화면: 밝게");
+  const [, options] = harness.fetchCalls.find(([url]) => url === "/api/preferences");
+  assert.equal(options.method, "PUT");
+  assert.deepEqual(JSON.parse(options.body), {theme: "light"});
+
+  await harness.elements["#theme-toggle"].dispatch("click");
+  assert.equal(harness.documentElement.dataset.theme, "dark");
+  await harness.elements["#theme-toggle"].dispatch("click");
+  assert.equal(harness.documentElement.dataset.theme, "system");
+
+  await harness.elements["#print"].dispatch("click");
+  assert.ok(harness.eventLog.some(([event]) => event === "print"));
+  assert.ok(harness.windowListeners.has("beforeprint") && harness.windowListeners.has("afterprint"));
 });

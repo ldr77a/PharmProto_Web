@@ -228,9 +228,12 @@ def test_first_load_only_exposes_api_setup(app_factory) -> None:
     response = app_factory().test_client().get("/")
 
     assert response.status_code == 200
+    page = response.get_data(as_text=True)
     probe = _ElementProbe()
-    probe.feed(response.get_data(as_text=True))
+    probe.feed(page)
 
+    assert 'data-theme="system"' in page
+    assert probe.text("theme-toggle") == "화면: 시스템" and probe.text("print") == "인쇄"
     assert "hidden" not in probe.attrs("api-setup")
     assert "hidden" in probe.attrs("research-app")
     assert "hidden" in probe.attrs("review-notice")
@@ -370,6 +373,9 @@ def test_generate_echoes_parsed_request_and_user_amounts(app_factory) -> None:
 
     assert response.status_code == 200
     html = response.get_json()["html"]
+    assert "<header class='print-header print-only'>" in html          # 인쇄·저장본 머리글(화면 숨김)
+    assert "아세트아미노펜 500 mg, 크로스카르멜로스나트륨 4%, 총 700 mg 정제" in html
+    assert "<dt>DB 스냅샷</dt>" in html and "<dt>모델</dt><dd>gpt-5.6-terra</dd>" in html
     assert "요청 해석" in html
     assert "Acetaminophen 500 mg (사용자 지정)" in html
     assert "700 mg (사용자 지정)" in html

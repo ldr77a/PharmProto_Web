@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-theme="{{ theme | default('system') }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -76,7 +76,11 @@
             <h1>신약 배합 생성기</h1>
             <div class="model-summary">
               <span>사용 모델 <strong id="selected-model">{{ model_catalog.openai.normal }}</strong></span>
-              <button id="logout" class="secondary compact" type="button">로그아웃 (API 키 삭제)</button>
+              <div class="header-actions">
+                <button id="theme-toggle" class="secondary compact" type="button" aria-label="화면 색 전환">화면: {{ {"system": "시스템", "light": "밝게", "dark": "어둡게"}[theme | default('system')] }}</button>
+                <button id="print" class="secondary compact" type="button">인쇄</button>
+                <button id="logout" class="secondary compact" type="button">로그아웃 (API 키 삭제)</button>
+              </div>
             </div>
           </header>
           <section class="status" aria-live="polite">

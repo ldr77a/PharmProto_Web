@@ -15,8 +15,21 @@ const followupQuestion = document.querySelector("#followup-question");
 const followupLog = document.querySelector("#followup-log");
 const followupButton = document.querySelector("#followup");
 const logoutButton = document.querySelector("#logout");
+const themeToggle = document.querySelector("#theme-toggle");
+const printButton = document.querySelector("#print");
 // 서버 메모리에 있는 현재 대화의 id. 새로고침·로그아웃이면 사라진다(브라우저에 저장하지 않음).
 let conversationId = null;
+
+// 화면 색: 선택값은 서버의 preferences.json 에 저장한다(브라우저 저장소를 쓰지 않는 규칙).
+const THEME_ORDER = ["system", "light", "dark"];
+const THEME_LABELS = {system: "화면: 시스템", light: "화면: 밝게", dark: "화면: 어둡게"};
+
+function applyTheme(theme) {
+  const value = THEME_ORDER.includes(theme) ? theme : "system";
+  document.documentElement.dataset.theme = value;
+  themeToggle.textContent = THEME_LABELS[value];
+  return value;
+}
 
 function populateModels() {
   const preferredTier = tier.value || "normal";
@@ -105,6 +118,7 @@ const ERROR_MESSAGES = {
   "RESULTS-001": "저장된 작업을 찾을 수 없습니다.",
   "RESULTS-IO-001": "저장 폴더에 쓰거나 지울 수 없습니다.",
   "RESULTS-SNAPSHOT-001": "다른 데이터베이스 버전으로 만든 결과라 이어서 질문할 수 없습니다. 열람과 다운로드만 가능합니다.",
+  "PREFERENCES-IO-001": "화면 설정을 파일에 저장하지 못했습니다. 이번 실행에서는 적용됩니다.",
   "APP-START-001": "앱 내부 오류가 발생했습니다.",
 };
 
@@ -145,6 +159,36 @@ document.querySelector("#save-key").addEventListener("click", async () => {
     apiKey.value = "";
     setupMessage.textContent = describeError(error);
     apiKey.focus();
+  }
+});
+
+themeToggle.addEventListener("click", async () => {
+  const current = document.documentElement.dataset.theme || "system";
+  const next = THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length];
+  applyTheme(next);
+  try {
+    await jsonRequest("/api/preferences", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({theme: next}),
+    });
+  } catch (error) {
+    message.textContent = describeError(error);   // 화면은 이미 바뀌었고 저장만 실패했다
+  }
+});
+
+printButton.addEventListener("click", () => window.print());
+// 접힌 근거·해설도 인쇄물에는 펼쳐서 넣고, 인쇄가 끝나면 원래대로 접는다.
+window.addEventListener("beforeprint", () => {
+  for (const details of document.querySelectorAll("details:not([open])")) {
+    details.dataset.printOpened = "1";
+    details.open = true;
+  }
+});
+window.addEventListener("afterprint", () => {
+  for (const details of document.querySelectorAll("details[data-print-opened]")) {
+    details.open = false;
+    delete details.dataset.printOpened;
   }
 });
 
@@ -229,5 +273,6 @@ followupButton.addEventListener("click", async () => {
   }
 });
 
+applyTheme(document.documentElement.dataset.theme);
 populateModels();
 refreshHealth();

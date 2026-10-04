@@ -398,7 +398,30 @@ def request_summary_html(spec, candidates) -> str:
     return f"<div class='card request-summary'><h4>요청 해석</h4><dl>{rows}</dl></div>"
 
 
-def results_html(spec, candidates, explanation=None, explanation_error: str | None = None) -> str:
+def print_header_html(meta) -> str:
+    """인쇄물·저장본 머리글(화면에서는 숨김): 요청, 생성 시각, DB 스냅샷, 모델, 면책."""
+    if not meta:
+        return ""
+    rows = [
+        (label, meta.get(key))
+        for key, label in (("question", "요청"), ("generated_at", "생성 시각"),
+                           ("snapshot_id", "DB 스냅샷"), ("model", "모델"))
+        if meta.get(key)
+    ]
+    dl = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(str(v))}</dd>" for k, v in rows)
+    return (
+        "<header class='print-header print-only'>"
+        "<p class='eyebrow'>PHRAMA PROTO · LOCAL RESEARCH TOOL</p>"
+        "<h2>신약 배합 생성기 결과</h2>"
+        f"<dl>{dl}</dl>"
+        "<p class='print-disclaimer'>연구 검토용 시제품의 출력입니다. 조성 수치는 지식 데이터베이스 근거로 "
+        "계산되었고 해설은 LLM 이 작성했습니다. 최종 처방·제조 판정이 아니며 반드시 사람이 검토해야 합니다.</p>"
+        "</header>"
+    )
+
+
+def results_html(spec, candidates, explanation=None, explanation_error: str | None = None,
+                 meta=None) -> str:
     if not candidates:
         hint = "총중량과 성분 함량 제약을 확인하세요."
         if getattr(spec, "user_amounts", None) or getattr(spec, "target_total_mg", None):
@@ -406,10 +429,10 @@ def results_html(spec, candidates, explanation=None, explanation_error: str | No
                     "총중량을 늘리거나 지정 분량을 줄여 다시 요청하세요.")
         return f"<div class='result-error'>유효한 조성 후보가 없습니다. {hint}</div>"
     apis = ", ".join(_title_en(a.name) for a in spec.apis)
-    meta = (f"API: <b>{html.escape(apis)}</b> · 제형: {html.escape(spec.dosage_form)}"
-            + (f" · 공정: {html.escape(spec.process)}" if spec.process else ""))
+    meta_line = (f"API: <b>{html.escape(apis)}</b> · 제형: {html.escape(spec.dosage_form)}"
+                 + (f" · 공정: {html.escape(spec.process)}" if spec.process else ""))
     if getattr(spec, "profile_id", ""):
-        meta += f" · 프로필: {html.escape(spec.profile_id)}"
+        meta_line += f" · 프로필: {html.escape(spec.profile_id)}"
     cards = "".join(
         candidate_html(c, explanation.for_candidate(c.idx) if explanation is not None else None)
         for c in candidates
@@ -422,7 +445,8 @@ def results_html(spec, candidates, explanation=None, explanation_error: str | No
             + "). 아래 표는 DB 근거만으로 생성되었습니다.</div>"
         )
     return (
-        f"<div class='meta'>{meta} · 후보 {len(candidates)}개</div>"
+        print_header_html(meta)
+        + f"<div class='meta'>{meta_line} · 후보 {len(candidates)}개</div>"
         + request_summary_html(spec, candidates)
         + notice + explanation_header_html(explanation) + cards
     )

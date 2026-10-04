@@ -19,6 +19,7 @@ CONVERSATION_ERROR = "CONVERSATION-001"          # 만료·미지의 대화 id
 RESULTS_NOT_FOUND_ERROR = "RESULTS-001"          # 저장된 작업 없음
 RESULTS_IO_ERROR = "RESULTS-IO-001"              # 저장·삭제 실패
 RESULTS_SNAPSHOT_ERROR = "RESULTS-SNAPSHOT-001"  # 다른 스냅샷으로 만든 저장본 재개
+PREFERENCES_IO_ERROR = "PREFERENCES-IO-001"      # 화면 설정 파일 쓰기 실패
 
 
 @dataclass(frozen=True)

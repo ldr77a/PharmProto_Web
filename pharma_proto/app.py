@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import os
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -27,6 +28,7 @@ from pharma_proto.errors import (
     APP_START_ERROR,
     CONVERSATION_ERROR,
     LLM_KEY_ERROR,
+    PREFERENCES_IO_ERROR,
     REQUEST_ERROR,
     REQUEST_FORM_ERROR,
     AppError,
@@ -38,6 +40,7 @@ from pharma_proto.llm.memory_keys import MemoryKeyStore
 from pharma_proto.llm.resilience import LLMFailure
 from pharma_proto.llm.schema import request_changes
 from pharma_proto.llm.service import LLMService
+from pharma_proto.preferences import PreferenceStore
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -64,6 +67,12 @@ class _FollowUpRequest(BaseModel):
     tier: Literal["cheap", "normal", "good"] = "normal"
     conversation_id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
     question: str = Field(min_length=1, max_length=4000)
+
+
+class _PreferencesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    theme: Literal["system", "light", "dark"]
 
 
 def _provider_status(store: MemoryKeyStore) -> dict[str, bool]:
@@ -118,6 +127,7 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
         raise
 
     conversations = ConversationStore()   # 후속 질문용 대화 상태 — 메모리에만, 로그아웃·종료 때 비운다
+    preferences = PreferenceStore(local_root / "preferences.json")   # 테마 같은 비밀 아닌 설정만
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config.update(TRUSTED_HOSTS=["127.0.0.1", "localhost"])
     app.extensions["knowledge_repository"] = repository
@@ -125,6 +135,7 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
     app.extensions["llm_service"] = llm_service
     app.extensions["diagnostics"] = diagnostics
     app.extensions["conversation_store"] = conversations
+    app.extensions["preferences"] = preferences
 
     @app.after_request
     def security_headers(response):
@@ -139,7 +150,27 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html", model_catalog=MODEL_CATALOG)
+        # 테마를 서버에서 그려 첫 화면부터 깜빡임 없이 적용한다(브라우저 저장소를 쓰지 않으므로).
+        return render_template(
+            "index.html",
+            model_catalog=MODEL_CATALOG,
+            theme=preferences.load()["theme"],
+        )
+
+    @app.get("/api/preferences")
+    def get_preferences():
+        return jsonify(preferences.load())
+
+    @app.put("/api/preferences")
+    def put_preferences():
+        body = _parse_body(_PreferencesRequest)
+        try:
+            saved = preferences.update(body.model_dump())
+        except ValueError:
+            raise AppError(REQUEST_ERROR, 400) from None
+        except OSError:
+            raise AppError(PREFERENCES_IO_ERROR, 500) from None
+        return jsonify(saved)
 
     @app.get("/health")
     def health():
@@ -242,18 +273,26 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             for candidate in candidates
         ]
 
-    def _render(provider: str, tier: str, api_key: str, model: str, spec) -> dict[str, Any]:
+    def _render(
+        provider: str, tier: str, api_key: str, model: str, spec, *, question: str = ""
+    ) -> dict[str, Any]:
         """생성 → 해설 → HTML·엑셀. generate 와 followup(refine)·resume 가 같은 경로를 탄다."""
         candidates = _generate_candidates(spec, provider=provider, model=model)
         explanation, explanation_error = _explain_or_none(
             provider, tier, api_key, model, spec, candidates
         )
+        meta = {   # 인쇄·저장본 머리글: 무엇을, 언제, 어느 DB·모델로 만들었는지
+            "question": question,
+            "generated_at": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M"),
+            "snapshot_id": _snapshot_id(),
+            "model": model,
+        }
         return {
             "spec": spec,
             "candidates": candidates,
             "explanation": explanation,
             "explanation_error": explanation_error,
-            "html": results_html(spec, candidates, explanation, explanation_error),
+            "html": results_html(spec, candidates, explanation, explanation_error, meta=meta),
             "downloads": _downloads(candidates),
         }
 
@@ -275,7 +314,7 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
                 spec = llm_service.parse(body.provider, body.tier, api_key, body.question)
         except LLMFailure as failure:
             return _llm_failure(failure, body.provider, model)
-        rendered = _render(body.provider, body.tier, api_key, model, spec)
+        rendered = _render(body.provider, body.tier, api_key, model, spec, question=body.question)
         conversation = conversations.create(
             provider=body.provider,
             tier=body.tier,
@@ -326,7 +365,10 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             changes = request_changes(conversation.parsed_request, reply.request)
             if changes:
                 # 재생성은 항상 새 요청에서 — run_generation 이 spec 을 바꾸므로 이전 spec 은 재사용하지 않는다.
-                rendered = _render(body.provider, body.tier, api_key, model, reply.request.to_domain())
+                rendered = _render(
+                    body.provider, body.tier, api_key, model, reply.request.to_domain(),
+                    question=conversation.question,
+                )
                 conversation.parsed_request = reply.request      # 성공한 뒤에만 대화를 갱신한다
                 for key, value in rendered.items():
                     setattr(conversation, key, value)
