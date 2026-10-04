@@ -45,21 +45,35 @@ HPE6 evidence, co-usage counts with the requested API); the model returns `Formu
 call keeps the table and shows `해설 생성 실패 (<code>)`. All three providers use structured outputs; the Claude
 path uses `messages.parse` because current Claude models reject forced `tool_choice`.
 
+## Follow-up layer (third LLM call)
+
+`POST /api/followup` sends the previous `ParsedRequest`, the current result payload and recent turns to
+`LLMService.followup`; the model returns `FollowUpResponse` (`action` refine|answer, a **full** `request`, `answer`
+sentences with `basis`). `refine` regenerates from `request.to_domain()` (never from the mutated spec) and only
+when `request_changes()` is non-empty; `answer` never touches the table. Conversation state is process memory
+(`pharma_proto/conversation.py`, LRU 20), cleared by logout/shutdown. Saved results (`/api/results…`) can be
+reopened read-only or resumed by recomputing deterministically from the stored `ParsedRequest` (no LLM call;
+refused with `RESULTS-SNAPSHOT-001` if the snapshot id differs). Plain-language explanations for provenance
+tags, gates and badges live in `generation/help_text.py` (app-owned) and feed both the sidebar and the popover.
+
 ## Request flow
 
-`POST /api/generate` → `llm/service.py` (`LLMService.parse`, provider-agnostic structured output) →
-`llm/schema.py:ParsedRequest.to_domain()` → `generation/input_parser.py:FormulationSpec` →
+`POST /api/generate` → `llm/service.py` (`LLMService.parse_request`, provider-agnostic structured output) →
+`llm/schema.py:ParsedRequest.to_domain()` (user amounts → `FormulationSpec.user_amounts`) →
+`generation/input_parser.py:FormulationSpec` →
 `generation/candidate_selector.py` fills omitted roles (DB evidence intersected with curated defaults,
 then curated fallback; records provenance in `spec.selection_sources`) →
 `generation/generation_loop.py:run_generation` → per candidate
-`generation/excipient_allocator.py:allocate` (API mg fixed, functional excipients at KG median %,
-**diluent takes the remainder so Σ=100 is structural**) → `gates/pipeline.py:run_pipeline` →
-`generation/html_formatter.py:results_html`.
+`generation/excipient_allocator.py:allocate` (API mg fixed, functional excipients at user % / user mg or KG
+median %, **diluent takes the remainder so Σ=100 is structural**; with no user total but a user diluent amount
+the total is solved backwards) → `gates/pipeline.py:run_pipeline` → `generation/html_formatter.py:results_html`.
 
 Gates run cheapest-first: 4 total-constraint → 5 total-sum → 6 function-coverage → 1 allowable-range →
 3 manufacturability → 2 compatibility (RDKit, last). Hard fails: 4, 5, 6, clear range violations in 1.
-Soft warnings: 2, 3. On hard fail the loop adjusts target total mass up to `MAX_RETRIES` times;
-unresolved candidates are returned labeled, not dropped.
+Soft warnings: 2, 3. On hard fail the loop adjusts target total mass up to `MAX_RETRIES` times, except when
+the user fixed the total or the diluent amount (then the first result is reported as is). If the only hard
+failure is gate 1 and every violation is a user-specified amount, the candidate is downgraded to `warning`
+(the gate chip still shows the failure). Unresolved candidates are returned labeled, not dropped.
 
 Role → KG function-name mapping is `knowledge/function_taxonomy.py:ROLE_ALIASES` (contract file);
 dosage-form role profiles and curated defaults are `generation/oral_solid_profiles.py`. API dose
@@ -69,9 +83,15 @@ fallback is user value → KG median (`lookup_api_doses`) → `generation/standa
 
 - **Error codes only**: every HTTP error returns a stable code from `pharma_proto/errors.py`. Never put
   exception text, paths, keys, or provider payloads into a response or a log.
-- **API keys are process-memory only** (`llm/memory_keys.py`); `settings.py` rejects any settings key
-  matching `key|secret|token|password`; settings are non-secret JSON merged from
-  `config/default-settings.json` plus a `LOCALAPPDATA` override.
+- **API keys are process-memory only** (`llm/memory_keys.py`); `POST /api/logout` clears them together with
+  the conversation store. The only persisted settings are non-secret display preferences in
+  `LOCALAPPDATA/PhramaProto/preferences.json` (`pharma_proto/preferences.py`: allowlisted keys, rejects names
+  matching `key|secret|token|password`). Saved results live under `LOCALAPPDATA/PhramaProto/results/`
+  (`pharma_proto/results_store.py`), written only when the user clicks save, never containing keys, and the
+  app returns them as JSON (ids, never paths).
+- **No browser storage**: `tests/product/test_mvp_app.py` fails if `static/app.js` mentions `localStorage`,
+  `sessionStorage` or `document.cookie`. CSP forbids inline scripts/styles; data is injected only via
+  `<script type="application/json">` blocks (`#model-catalog`, `#help-text`).
 - **Model allowlist**: `llm/catalog.py` maps provider × tier (`cheap`/`normal`/`good`) to model ids.
   There is intentionally no free-text model field.
 - Gemini/OpenAI/Anthropic SDKs are imported lazily inside the factory functions in `llm/service.py`;
@@ -81,7 +101,8 @@ fallback is user value → KG median (`lookup_api_doses`) → `generation/standa
 
 ```bash
 uv sync
-uv run pytest
+uv run pytest                          # on macOS: LOCALAPPDATA=/tmp/localappdata and deselect the Windows-only product tests
+node --test tests/test_app_js.mjs      # app.js in a fake DOM; add new element ids to its `elements` map
 uv run ruff check .
 pwsh tools/build-release.ps1          # → dist/PhramaProto-<app-version>-<snapshot-id>.zip (Windows)
 ```
