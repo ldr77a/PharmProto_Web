@@ -17,8 +17,8 @@ def test_model_catalog_has_exactly_three_providers_and_three_tiers():
         },
         "claude": {
             "cheap": "claude-haiku-4-5-20251001",
-            "normal": "claude-sonnet-5",
-            "good": "claude-opus-5",
+            "normal": "claude-sonnet-5-5",
+            "good": "claude-opus-5-5",
         },
     }
     assert model_for("openai", "normal") == "gpt-5.6-terra"

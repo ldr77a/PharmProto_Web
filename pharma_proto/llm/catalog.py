@@ -20,8 +20,8 @@ MODEL_CATALOG: dict[Provider, dict[Tier, str]] = {
     },
     "claude": {
         "cheap": "claude-haiku-4-5-20251001",
-        "normal": "claude-sonnet-5",
-        "good": "claude-opus-5",
+        "normal": "claude-sonnet-5-5",
+        "good": "claude-opus-5-5",
     },
 }
 

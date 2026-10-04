@@ -12,6 +12,7 @@ from flask import Flask, jsonify, render_template, request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from werkzeug.exceptions import HTTPException
 
+from generation.explanation import build_explanation_payload
 from generation.generation_loop import run_generation
 from generation.html_formatter import results_html
 from pharma_proto import __version__
@@ -182,6 +183,37 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             model=model,
             snapshot_id=str(repository.health()["snapshot_id"]),
         )
+        # 해설층: 숫자는 위에서 DB 가 정했고, LLM 은 해석만 한다. 실패해도 표는 그대로 돌려준다.
+        explanation = None
+        explanation_error = None
+        explain = getattr(llm_service, "explain", None)
+        if candidates and callable(explain):
+            try:
+                explanation = explain(
+                    body.provider,
+                    body.tier,
+                    api_key,
+                    build_explanation_payload(spec, candidates, repository),
+                )
+                diagnostics.record(
+                    event="explanation_complete",
+                    provider=body.provider,
+                    model=model,
+                    snapshot_id=str(repository.health()["snapshot_id"]),
+                )
+            except LLMFailure as failure:
+                explanation_error = failure.code
+                diagnostics.record(
+                    event="llm_error",
+                    code=failure.code,
+                    provider=body.provider,
+                    model=model,
+                    snapshot_id=str(repository.health()["snapshot_id"]),
+                    request_id=failure.request_id,
+                    provider_code=failure.provider_code,
+                    provider_status=failure.provider_status,
+                    provider_reason=failure.provider_reason,
+                )
         downloads = [
             {
                 "candidate_idx": candidate.idx,
@@ -192,7 +224,10 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             }
             for candidate in candidates
         ]
-        return jsonify(html=results_html(spec, candidates), downloads=downloads)
+        return jsonify(
+            html=results_html(spec, candidates, explanation, explanation_error),
+            downloads=downloads,
+        )
 
     @app.errorhandler(AppError)
     def app_error(error: AppError):

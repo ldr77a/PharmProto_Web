@@ -35,6 +35,16 @@ database in place; rollback means re-running an older ZIP. Schema 2 snapshots ca
 `role_pct_sum_range` / `primary_role` first and fall back to the function-based lookups when the role
 table has fewer than 5 observations. Provenance labels `kg_role` / `hpe6+kg_role` mark the role-specific path.
 
+## Explanation layer (second LLM call)
+
+The LLM parses the request (`LLMService.parse`) and, after the deterministic generation, explains the result
+(`LLMService.explain`). `generation/explanation.py` builds the payload (components with provenance, gate results,
+HPE6 evidence, co-usage counts with the requested API); the model returns `FormulationExplanation`
+(`llm/schema.py`) and every sentence carries `basis`: `evidence` (cites supplied data, `refs`) or `general`
+(model knowledge, rendered as "일반 지식·검증 필요"). Numbers are never changed by the model. A failed explain
+call keeps the table and shows `해설 생성 실패 (<code>)`. All three providers use structured outputs; the Claude
+path uses `messages.parse` because current Claude models reject forced `tool_choice`.
+
 ## Request flow
 
 `POST /api/generate` → `llm/service.py` (`LLMService.parse`, provider-agnostic structured output) →

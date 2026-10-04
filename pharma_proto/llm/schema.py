@@ -63,4 +63,65 @@ class ParsedRequest(BaseModel):
         )
 
 
-__all__ = ["ParsedAPI", "ParsedRequest", "ParsedRoleChoice"]
+# --- 해설층(2차 호출) ---------------------------------------------------------------
+# 숫자는 DB 가 만들고 LLM 은 해석만 한다. 문장마다 basis 로 "제공된 근거 인용(evidence)" 과
+# "모델 일반 지식(general, 검증 필요)" 을 구분해 화면에 표시한다.
+_BASIS_VALUES = ("evidence", "general")
+
+
+def _normalize_basis(value: str) -> str:
+    text = (value or "").strip().lower()
+    return "evidence" if text.startswith("ev") or text in ("근거", "evidence") else "general"
+
+
+class ExplanationItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200)]
+    basis: str = "general"
+    refs: list[Annotated[str, StringConstraints(max_length=200)]] = Field(default_factory=list, max_length=12)
+
+    def model_post_init(self, context: object, /) -> None:
+        object.__setattr__(self, "basis", _normalize_basis(self.basis))
+
+
+class IngredientNote(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    ingredient: IngredientName
+    rationale: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200)]
+    basis: str = "general"
+    refs: list[Annotated[str, StringConstraints(max_length=200)]] = Field(default_factory=list, max_length=12)
+    caution: Annotated[str, StringConstraints(max_length=800)] = ""
+
+    def model_post_init(self, context: object, /) -> None:
+        object.__setattr__(self, "basis", _normalize_basis(self.basis))
+
+
+class CandidateExplanation(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    candidate_idx: int = Field(ge=1, le=20)
+    summary: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] = ""
+    ingredient_notes: list[IngredientNote] = Field(default_factory=list, max_length=40)
+    risks: list[ExplanationItem] = Field(default_factory=list, max_length=20)
+    process_notes: list[ExplanationItem] = Field(default_factory=list, max_length=20)
+    verification_checklist: list[ExplanationItem] = Field(default_factory=list, max_length=20)
+    alternatives: list[ExplanationItem] = Field(default_factory=list, max_length=20)
+
+
+class FormulationExplanation(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    api_profile: list[ExplanationItem] = Field(default_factory=list, max_length=20)
+    candidates: list[CandidateExplanation] = Field(default_factory=list, max_length=20)
+    disclaimer: Annotated[str, StringConstraints(max_length=600)] = ""
+
+    def for_candidate(self, idx: int) -> CandidateExplanation | None:
+        return next((item for item in self.candidates if item.candidate_idx == idx), None)
+
+
+__all__ = [
+    "CandidateExplanation", "ExplanationItem", "FormulationExplanation", "IngredientNote",
+    "ParsedAPI", "ParsedRequest", "ParsedRoleChoice",
+]

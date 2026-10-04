@@ -110,7 +110,7 @@ tier.addEventListener("change", () => {
 });
 
 document.querySelector("#generate").addEventListener("click", async () => {
-  message.textContent = "생성 중…";
+  message.textContent = "생성 중… 조성표를 만든 뒤 LLM 해설을 작성합니다. 1~2분 걸릴 수 있습니다.";
   results.replaceChildren();
   reviewNotice.hidden = true;
   try {

@@ -77,11 +77,22 @@ class _ElementProbe(HTMLParser):
 
 
 class _FakeLLMService:
-    def __init__(self, spec: SimpleNamespace) -> None:
+    def __init__(self, spec: SimpleNamespace, explanation=None, explain_failure=None) -> None:
         self._spec = spec
+        self._explanation = explanation
+        self._explain_failure = explain_failure
+        self.explain_payloads: list[dict] = []
 
     def parse(self, provider: str, tier: str, api_key: str, question: str):
         return self._spec
+
+    def explain(self, provider: str, tier: str, api_key: str, payload: dict):
+        self.explain_payloads.append(payload)
+        if self._explain_failure is not None:
+            raise self._explain_failure
+        if self._explanation is None:
+            raise LLMFailure("LLM-RESPONSE-001", False)
+        return self._explanation
 
 
 class _FailingLLMService:
@@ -179,8 +190,8 @@ def test_first_load_only_exposes_api_setup(app_factory) -> None:
         },
         "claude": {
             "cheap": "claude-haiku-4-5-20251001",
-            "normal": "claude-sonnet-5",
-            "good": "claude-opus-5",
+            "normal": "claude-sonnet-5-5",
+            "good": "claude-opus-5-5",
         },
     }
 
@@ -327,3 +338,62 @@ def test_xlsx_treats_formula_like_ingredient_names_as_text(
 
     assert ingredient_cell.data_type == "s"
     assert ingredient_cell.value == f"'{ingredient_name}"
+
+
+def _explanation():
+    from pharma_proto.llm.schema import FormulationExplanation
+
+    return FormulationExplanation.model_validate({
+        "api_profile": [{"text": "수용성 결정성 분말.", "basis": "general"}],
+        "candidates": [{
+            "candidate_idx": 1,
+            "summary": "단순 직타 조성.",
+            "ingredient_notes": [{"ingredient": "Microcrystalline cellulose",
+                                  "rationale": "역할별 범위 안.", "basis": "evidence",
+                                  "refs": ["KG 역할별 범위 n=2034"]}],
+            "risks": [{"text": "흡습성 확인.", "basis": "general"}],
+        }],
+        "disclaimer": "검토용.",
+    })
+
+
+def test_generate_renders_explanation_with_basis_badges(app_factory, monkeypatch) -> None:
+    spec = SimpleNamespace(apis=[SimpleNamespace(name="Acetaminophen")], dosage_form="tablet",
+                           process="direct compression", profile_id="immediate_release_tablet")
+    monkeypatch.setattr(app_module, "run_generation",
+                        lambda spec, *, repository, offline: [_candidate(1), _candidate(2)])
+    service = _FakeLLMService(spec, explanation=_explanation())
+    client = app_factory(llm_service=service).test_client()
+    assert client.post("/api/key", json={"provider": "claude", "api_key": "test-key"}).status_code == 200
+
+    response = client.post("/api/generate", json={"provider": "claude", "tier": "normal",
+                                                  "question": "아세트아미노펜 500 mg 정제"})
+
+    assert response.status_code == 200
+    html = response.get_json()["html"]
+    assert html.count("<details class='explain' open>") == 1          # 해설이 있는 후보 1만
+    assert "class='basis ev'" in html and "class='basis gen'" in html
+    assert "KG 역할별 범위 n=2034" in html and "API 프로파일" in html and "검토용." in html
+    payload = service.explain_payloads[0]
+    assert payload["request"]["apis"][0]["name"] == "Acetaminophen"
+    assert [c["candidate_idx"] for c in payload["candidates"]] == [1, 2]
+    assert payload["candidates"][0]["components"][0]["ingredient"] == "Acetaminophen"
+
+
+def test_generate_keeps_table_when_explanation_fails(app_factory, monkeypatch, tmp_path: Path) -> None:
+    spec = SimpleNamespace(apis=[SimpleNamespace(name="Acetaminophen")], dosage_form="tablet",
+                           process="", profile_id="immediate_release_tablet")
+    monkeypatch.setattr(app_module, "run_generation",
+                        lambda spec, *, repository, offline: [_candidate(1)])
+    failure = LLMFailure("LLM-RATE-001", True, provider_code=429)
+    client = app_factory(llm_service=_FakeLLMService(spec, explain_failure=failure)).test_client()
+    assert client.post("/api/key", json={"provider": "openai", "api_key": "test-key"}).status_code == 200
+
+    response = client.post("/api/generate", json={"provider": "openai", "tier": "normal",
+                                                  "question": "아세트아미노펜 500 mg 정제"})
+
+    assert response.status_code == 200
+    html = response.get_json()["html"]
+    assert "해설 생성 실패 (LLM-RATE-001)" in html and 'class="download-xlsx ' in html
+    rows = (tmp_path / "PhramaProto" / "logs" / "app.log").read_text(encoding="utf-8")
+    assert '"LLM-RATE-001"' in rows.splitlines()[-1] or "LLM-RATE-001" in rows

@@ -49,6 +49,20 @@ th, td { border-bottom: 1px solid #303840; text-align: left; padding: 9px; }
 .warn, .warning { color: #ffd166; }
 .bad, .fail { color: #ff8c8c; }
 details { margin-top: 14px; }
+.explain summary, .evidence summary { cursor: pointer; color: #c7d0d7; font-weight: 600; }
+.explain-section { margin-top: 12px; }
+.explain-section h5 { margin: 0 0 6px; color: #70e0b0; font-size: 13px; }
+.explain-section ul { margin: 0; padding-left: 18px; line-height: 1.6; }
+.explain-summary { margin: 10px 0 0; line-height: 1.6; }
+.explain-table td { vertical-align: top; }
+.explain-table .ing { width: 28%; white-space: nowrap; }
+.explain-head { padding: 16px 20px; }
+.explain-disclaimer { margin: 10px 0 0; color: #aab4bd; font-size: 12px; }
+.basis { display: inline-block; border-radius: 999px; padding: 1px 7px; font-size: 11px; margin-right: 4px; vertical-align: middle; }
+.basis.ev { background: #1f3a30; color: #70e0b0; }
+.basis.gen { background: #3a3220; color: #ffd166; }
+.refs { color: #7f8b95; font-size: 11px; margin-left: 4px; }
+.caution { color: #ffd166; font-size: 12px; margin-top: 4px; }
 @media (max-width: 640px) {
   main { margin: 24px auto; }
   .setup-card { margin: 7vh auto; padding: 20px; }

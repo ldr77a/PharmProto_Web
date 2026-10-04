@@ -173,7 +173,73 @@ def _evidence_html(cand) -> str:
     )
 
 
-def candidate_html(cand) -> str:
+def _basis_badge(basis: str) -> str:
+    if basis == "evidence":
+        return "<span class='basis ev' title='입력된 DB·HPE6 근거를 인용한 문장'>근거</span>"
+    return "<span class='basis gen' title='모델의 일반 제제학 지식. 사람이 확인해야 함'>일반 지식·검증 필요</span>"
+
+
+def _refs_html(refs) -> str:
+    refs = [r for r in (refs or []) if str(r).strip()]
+    if not refs:
+        return ""
+    return "<span class='refs'>" + html.escape(", ".join(str(r) for r in refs[:6])) + "</span>"
+
+
+def _items_html(title: str, items) -> str:
+    if not items:
+        return ""
+    lis = "".join(
+        f"<li>{_basis_badge(item.basis)} {html.escape(item.text)} {_refs_html(item.refs)}</li>"
+        for item in items
+    )
+    return f"<div class='explain-section'><h5>{html.escape(title)}</h5><ul>{lis}</ul></div>"
+
+
+def explanation_html(expl) -> str:
+    """후보 하나의 해설. 문장마다 근거/일반지식 배지를 붙인다(숫자는 표의 것, 해설은 LLM)."""
+    if expl is None:
+        return ""
+    parts = []
+    if expl.summary:
+        parts.append(f"<p class='explain-summary'>{html.escape(expl.summary)}</p>")
+    if expl.ingredient_notes:
+        rows = "".join(
+            "<tr>"
+            f"<td class='ing'>{html.escape(note.ingredient)}</td>"
+            f"<td>{_basis_badge(note.basis)} {html.escape(note.rationale)} {_refs_html(note.refs)}"
+            + (f"<div class='caution'>주의: {html.escape(note.caution)}</div>" if note.caution else "")
+            + "</td></tr>"
+            for note in expl.ingredient_notes
+        )
+        parts.append(
+            "<div class='explain-section'><h5>성분별 선택 이유</h5>"
+            f"<table class='explain-table'><tbody>{rows}</tbody></table></div>"
+        )
+    parts.append(_items_html("위험 요소", expl.risks))
+    parts.append(_items_html("공정 메모", expl.process_notes))
+    parts.append(_items_html("실험으로 확인할 것", expl.verification_checklist))
+    parts.append(_items_html("대안", expl.alternatives))
+    body = "".join(parts)
+    if not body:
+        return ""
+    return (
+        "<details class='explain' open><summary>해설 (LLM · 숫자는 DB 근거, 문장마다 근거 여부 표시)</summary>"
+        + body + "</details>"
+    )
+
+
+def explanation_header_html(explanation) -> str:
+    if explanation is None:
+        return ""
+    parts = [_items_html("API 프로파일", explanation.api_profile)]
+    if explanation.disclaimer:
+        parts.append(f"<p class='explain-disclaimer'>{html.escape(explanation.disclaimer)}</p>")
+    body = "".join(parts)
+    return f"<div class='card explain-head'>{body}</div>" if body else ""
+
+
+def candidate_html(cand, explanation=None) -> str:
     picks = ", ".join(f"{_FUNC_KO.get(f, f)}: {_title_en(n)}" for f, n in cand.pick.items())
     badge_cls = {"pass": "ok", "warning": "warn", "unresolved": "bad"}[cand.status]
     nwarn = len(cand.gate_out["warnings"])
@@ -209,6 +275,7 @@ def candidate_html(cand) -> str:
     all_notes = warn_notes + selection_notes
     notes_html = f"<ul class='notes'>{all_notes}</ul>" if all_notes else ""
     evidence_html = _evidence_html(cand)
+    explain_html = explanation_html(explanation)
 
     return f"""
     <div class="card">
@@ -227,10 +294,11 @@ def candidate_html(cand) -> str:
       {evidence_html}
       <div class="gates">게이트 검증: {gate_syms}</div>
       {notes_html}
+      {explain_html}
     </div>"""
 
 
-def results_html(spec, candidates) -> str:
+def results_html(spec, candidates, explanation=None, explanation_error: str | None = None) -> str:
     if not candidates:
         return (
             "<div class='result-error'>유효한 조성 후보가 없습니다. "
@@ -241,5 +309,18 @@ def results_html(spec, candidates) -> str:
             + (f" · 공정: {html.escape(spec.process)}" if spec.process else ""))
     if getattr(spec, "profile_id", ""):
         meta += f" · 프로필: {html.escape(spec.profile_id)}"
-    cards = "".join(candidate_html(c) for c in candidates)
-    return f"<div class='meta'>{meta} · 후보 {len(candidates)}개</div>{cards}"
+    cards = "".join(
+        candidate_html(c, explanation.for_candidate(c.idx) if explanation is not None else None)
+        for c in candidates
+    )
+    notice = ""
+    if explanation_error:
+        notice = (
+            "<div class='result-error'>해설 생성 실패 ("
+            + html.escape(explanation_error)
+            + "). 아래 표는 DB 근거만으로 생성되었습니다.</div>"
+        )
+    return (
+        f"<div class='meta'>{meta} · 후보 {len(candidates)}개</div>"
+        + notice + explanation_header_html(explanation) + cards
+    )
