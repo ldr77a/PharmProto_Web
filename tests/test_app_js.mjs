@@ -88,6 +88,17 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
       "gate:1": {title: "게이트1 사용량 범위", text: "실제 배합 범위와 비교합니다."},
     })}),
     "#followup-panel": fakeElement({hidden: true}),
+    "#side-panel": fakeElement({hidden: true}),
+    "#panel-backdrop": fakeElement({hidden: true}),
+    "#panel-title": fakeElement(),
+    "#gate-guide": fakeElement({hidden: true}),
+    "#panel-saved": fakeElement({hidden: true}),
+    "#open-gates": fakeElement(),
+    "#open-saved": fakeElement(),
+    "#close-panel": fakeElement(),
+    "#examples": fakeElement(),
+    "#results-skeleton": fakeElement({hidden: true}),
+    "#results-empty": fakeElement(),
     "#followup-question": fakeElement(),
     "#followup-log": fakeElement(),
     "#followup": fakeElement(),
@@ -402,4 +413,42 @@ test("근거 꼬리표·게이트 칩을 클릭하면 쉬운 말 설명이 열�
 
   await harness.results.dispatch("click", {target: {closest: () => null}});     // 설명 아닌 곳 클릭은 무시
   assert.equal(harness.elements["#help-popover"].hidden, true);
+});
+
+test("옆 패널은 게이트 안내·저장된 작업을 번갈아 열고, 예시 칩은 질문 칸을 채우며, 생성 중엔 자리 표시가 보인다", async () => {
+  const card = `<div class="card"><button class="download-xlsx" data-candidate-index="1" disabled></button>표</div>`;
+  const downloads = [{candidate_idx: 1, filename: "조성_후보_1.xlsx", content_base64: "WA=="}];
+  const harness = browserHarness({
+    generatePayload: {html: card, downloads, conversation_id: "a".repeat(32)},
+    routes: {"GET /api/results": {results: []}},
+  });
+  const el = harness.elements;
+
+  await el["#open-saved"].dispatch("click");
+  assert.equal(el["#side-panel"].hidden, false);
+  assert.equal(el["#panel-title"].textContent, "저장된 작업");
+  assert.equal(el["#panel-saved"].hidden, false);
+  assert.equal(el["#gate-guide"].hidden, true);
+  assert.ok(harness.fetchCalls.some(([url]) => url === "/api/results"));
+  assert.equal(el["#results-list"].children[0].className, "empty");
+
+  await el["#open-gates"].dispatch("click");
+  assert.equal(el["#panel-title"].textContent, "게이트 안내");
+  assert.equal(el["#gate-guide"].hidden, false);
+  assert.equal(el["#panel-saved"].hidden, true);
+
+  harness.documentListeners.get("keydown")({key: "Escape"});
+  assert.equal(el["#side-panel"].hidden, true);
+  assert.equal(el["#panel-backdrop"].hidden, true);
+
+  const chip = {dataset: {example: "트리메타지딘 20 mg 정제, 후보 3개"}, closest(selector) { return selector === "[data-example]" ? this : null; }};
+  await el["#examples"].dispatch("click", {target: chip});
+  assert.equal(el["#question"].value, "트리메타지딘 20 mg 정제, 후보 3개");
+  assert.equal(el["#question"].focused, true);
+
+  assert.equal(el["#results-empty"].hidden, false);
+  await el["#generate"].dispatch("click");
+  assert.equal(el["#results-skeleton"].hidden, true);     // 끝나면 자리 표시는 사라지고
+  assert.equal(el["#results-empty"].hidden, true);        // 결과가 있으니 시작 안내도 숨는다
+  assert.equal(el["#result-actions"].hidden, false);
 });

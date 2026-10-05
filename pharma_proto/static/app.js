@@ -27,8 +27,44 @@ const helpPopover = document.querySelector("#help-popover");
 const helpTitle = document.querySelector("#help-title");
 const helpBody = document.querySelector("#help-body");
 const helpClose = document.querySelector("#help-close");
+const sidePanel = document.querySelector("#side-panel");
+const panelBackdrop = document.querySelector("#panel-backdrop");
+const panelTitle = document.querySelector("#panel-title");
+const gateGuide = document.querySelector("#gate-guide");
+const panelSaved = document.querySelector("#panel-saved");
+const openGatesButton = document.querySelector("#open-gates");
+const openSavedButton = document.querySelector("#open-saved");
+const closePanelButton = document.querySelector("#close-panel");
+const examples = document.querySelector("#examples");
+const resultsSkeleton = document.querySelector("#results-skeleton");
+const resultsEmpty = document.querySelector("#results-empty");
 // 서버 메모리에 있는 현재 대화의 id. 새로고침·로그아웃이면 사라진다(브라우저에 저장하지 않음).
 let conversationId = null;
+
+// 옆 패널: 게이트 안내 / 저장된 작업. 한 번에 하나만.
+function openPanel(kind) {
+  const saved = kind === "saved";
+  panelTitle.textContent = saved ? "저장된 작업" : "게이트 안내";
+  gateGuide.hidden = saved;
+  panelSaved.hidden = !saved;
+  sidePanel.hidden = false;
+  panelBackdrop.hidden = false;
+  openGatesButton.ariaExpanded = String(!saved);
+  openSavedButton.ariaExpanded = String(saved);
+  closePanelButton.focus();
+  return saved ? refreshResults() : Promise.resolve();
+}
+
+function closePanel() {
+  sidePanel.hidden = true;
+  panelBackdrop.hidden = true;
+  openGatesButton.ariaExpanded = "false";
+  openSavedButton.ariaExpanded = "false";
+}
+
+function updateEmptyState() {
+  resultsEmpty.hidden = results.querySelector(".card") !== null;
+}
 
 // 화면 색: 선택값은 서버의 preferences.json 에 저장한다(브라우저 저장소를 쓰지 않는 규칙).
 const THEME_ORDER = ["system", "light", "dark"];
@@ -75,6 +111,7 @@ function showResult(data) {
   results.innerHTML = data.html;
   enableDownloads(data.downloads || []);
   reviewNotice.hidden = results.querySelector(".card") === null;
+  updateEmptyState();
 }
 
 function showTurns(turns) {
@@ -90,6 +127,8 @@ function showApiSetup() {
   results.replaceChildren();
   reviewNotice.hidden = true;
   resetConversation();
+  closePanel();
+  resultsEmpty.hidden = false;
   setupMessage.textContent = "";
   apiKey.focus();
 }
@@ -245,6 +284,8 @@ generateButton.addEventListener("click", async () => {
   results.replaceChildren();
   reviewNotice.hidden = true;
   resetConversation();
+  resultsEmpty.hidden = true;
+  resultsSkeleton.hidden = false;      // 결과 자리에 표 모양 자리 표시
   generateButton.disabled = true;
   generateButton.ariaBusy = "true";
   try {
@@ -260,11 +301,27 @@ generateButton.addEventListener("click", async () => {
     message.textContent = "완료";
   } catch (error) {
     message.textContent = describeError(error);
+    updateEmptyState();
   } finally {
+    resultsSkeleton.hidden = true;
     generateButton.disabled = false;
     generateButton.ariaBusy = "false";
   }
 });
+
+// 예시 질문 칩: 누르면 질문 칸에 채운다(바로 생성하지는 않는다)
+examples.addEventListener("click", (event) => {
+  const target = event && event.target;
+  const chip = target && typeof target.closest === "function" ? target.closest("[data-example]") : null;
+  if (!chip) return;
+  question.value = chip.dataset.example;
+  question.focus();
+});
+
+openGatesButton.addEventListener("click", () => openPanel("gates"));
+openSavedButton.addEventListener("click", () => openPanel("saved"));
+closePanelButton.addEventListener("click", closePanel);
+panelBackdrop.addEventListener("click", closePanel);
 
 followupButton.addEventListener("click", async () => {
   const text = followupQuestion.value.trim();
@@ -337,7 +394,10 @@ results.addEventListener("click", handleHelpClick);
 followupLog.addEventListener("click", handleHelpClick);
 helpClose.addEventListener("click", closeHelp);
 document.addEventListener("keydown", (event) => {
-  if (event && event.key === "Escape") closeHelp();
+  if (event && event.key === "Escape") {
+    closeHelp();
+    closePanel();
+  }
 });
 document.addEventListener("click", (event) => {
   if (helpPopover.hidden) return;

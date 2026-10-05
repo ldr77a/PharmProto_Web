@@ -3,15 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="경구 고형제 조성 후보를 지식 데이터베이스 근거로 계산하고 다섯 게이트로 검증하는 로컬 연구 도구">
+  <meta name="color-scheme" content="light dark">
   <title>신약 배합 생성기</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </head>
-<body>
+<body class="app">
+  <a class="skip-link" href="#results">결과로 건너뛰기</a>
   <main>
     <section id="api-setup" class="setup-card" aria-labelledby="setup-title">
-      <p class="eyebrow">PHRAMA PROTO · API SETUP</p>
+      <p class="eyebrow">Phrama Proto · 로컬 연구 도구</p>
       <h1 id="setup-title">API 설정</h1>
+      <p class="lede">외부 AI 는 질문을 읽고 해설을 쓰는 데만 씁니다. 조성표의 숫자는 이 컴퓨터 안의 지식 데이터베이스가 계산합니다.</p>
       <div class="setup-fields">
         <label>모델 종류
           <select id="provider" autocomplete="off">
@@ -27,7 +32,7 @@
             {% endfor %}
           </select>
         </label>
-        <p id="api-cost-notice" class="notice">외부 AI API 호출은 과금 대상입니다.</p>
+        <p id="api-cost-notice" class="notice cost-notice">외부 AI API 호출은 과금 대상입니다.</p>
         <label>이번 실행의 API 키
         <input id="api-key" type="password" autocomplete="off" spellcheck="false">
         </label>
@@ -38,93 +43,105 @@
     </section>
 
     <section id="research-app" hidden>
-      <div class="research-layout">
-        <aside class="gate-sidebar" aria-label="게이트 판정 안내">
-          <details id="gate-guide" class="gate-guide">
-            <summary>
-              <span>게이트 판정 안내</span>
-              <small>열기·닫기</small>
-            </summary>
-            <ol class="gate-list">
-              {% for gate in gate_help %}
-              <li>
-                <strong>{{ gate.title }}</strong>
-                <p>{{ gate.text }}</p>
-              </li>
-              {% endfor %}
-            </ol>
-          </details>
-          <details id="about-tool" class="gate-guide about-tool">
-            <summary>
-              <span>이 도구는 일반 AI 와 무엇이 다른가요?</span>
-              <small>열기·닫기</small>
-            </summary>
-            <div class="saved-body about-body">
-              <p><b>숫자는 AI 가 만들지 않습니다.</b> 조성표의 mg·% 는 이 컴퓨터 안의 지식 데이터베이스(특허·승인 라벨 배합의 집계, HPE6 용도범위)로만 계산합니다. AI(LLM)는 질문을 읽어 요청으로 바꾸고, 완성된 표를 해설하고, 후속 질문에 답하는 일만 맡습니다.</p>
-              <p><b>그래서 Gemini 같은 범용 AI 와 답이 다릅니다.</b> 범용 AI 는 학습 기억으로 그럴듯한 조성을 바로 써 내지만 출처를 보여 주지 못합니다. 이 도구는 모든 숫자에 근거 꼬리표(예: KG 범위, n=…)를 달고 다섯 게이트로 검증하며, 해설 문장마다 근거인지 일반 지식인지 표시합니다. 표의 근거 꼬리표·게이트 칩·배지를 클릭하면 설명이 나옵니다.</p>
-              <p><b>새 제형·새 데이터를 넣는 방법</b>은 AI 를 다시 학습시키는 것이 아니라, 데이터베이스에 배합·문헌을 적재하고 제형 규칙을 추가하는 것입니다. 지금은 경구 고형제(정제·캡슐·과립·산제)만 지원합니다.</p>
-              <p><b>키와 비용, 한계.</b> API 키는 메모리에만 두고 파일에 저장하지 않으며 로그아웃하면 지워집니다. 외부 AI 호출은 과금 대상입니다. 결과는 의사결정 지원이며 최종 처방·제조 판정이 아닙니다.</p>
-            </div>
-          </details>
-          <details id="saved-results" class="gate-guide saved-results">
-            <summary>
-              <span>저장된 작업</span>
-              <small>열기·닫기</small>
-            </summary>
-            <div class="saved-body">
-              <p class="notice">저장 위치: <code>%LOCALAPPDATA%\PhramaProto\results</code>. 저장 파일에 API 키는 들어가지 않습니다. 열기는 읽기 전용이고, 이어서 질문하려면 <b>이어서 질문</b>을 누르세요.</p>
-              <button id="refresh-results" class="secondary compact" type="button">목록 새로고침</button>
-              <ul id="results-list" class="results-list" aria-live="polite"></ul>
-            </div>
-          </details>
-        </aside>
+      <header class="topbar">
+        <div class="brand">
+          <p class="eyebrow">Phrama Proto</p>
+          <h1>신약 배합 생성기</h1>
+        </div>
+        <div class="topbar-meta">
+          <span class="model-line">모델 <strong id="selected-model">{{ model_catalog.openai.normal }}</strong></span>
+          <span id="health" class="health-line">데이터베이스 확인 중…</span>
+        </div>
+        <nav class="header-actions" aria-label="도구">
+          <button id="open-gates" class="ghost compact" type="button" aria-controls="side-panel" aria-expanded="false">게이트 안내</button>
+          <button id="open-saved" class="ghost compact" type="button" aria-controls="side-panel" aria-expanded="false">저장된 작업</button>
+          <button id="print" class="ghost compact" type="button">인쇄</button>
+          <button id="theme-toggle" class="ghost compact" type="button" aria-label="화면 색 전환">화면: {{ {"system": "시스템", "light": "밝게", "dark": "어둡게"}[theme | default('system')] }}</button>
+          <button id="logout" class="ghost compact" type="button">로그아웃 (API 키 삭제)</button>
+        </nav>
+      </header>
 
-        <div class="research-content">
-          <header>
-            <p class="eyebrow">PHRAMA PROTO · LOCAL RESEARCH TOOL</p>
-            <h1>신약 배합 생성기</h1>
-            <div class="model-summary">
-              <span>사용 모델 <strong id="selected-model">{{ model_catalog.openai.normal }}</strong></span>
-              <div class="header-actions">
-                <button id="theme-toggle" class="secondary compact" type="button" aria-label="화면 색 전환">화면: {{ {"system": "시스템", "light": "밝게", "dark": "어둡게"}[theme | default('system')] }}</button>
-                <button id="print" class="secondary compact" type="button">인쇄</button>
-                <button id="logout" class="secondary compact" type="button">로그아웃 (API 키 삭제)</button>
-              </div>
-            </div>
-          </header>
-          <section class="status" aria-live="polite">
-            <strong>데이터베이스</strong><span id="health">확인 중…</span>
-          </section>
-          <section class="controls">
-            <label class="wide">연구 질문
-              <textarea id="question" maxlength="4000" rows="6" placeholder="아세트아미노펜 500 mg 속방정제를 직접타정법으로 제조해라."></textarea>
+      <div class="workbench">
+        <aside class="bench-left" aria-label="질문 입력">
+          <section class="pane" aria-labelledby="ask-title">
+            <h2 id="ask-title" class="pane-title">연구 질문</h2>
+            <label class="wide visually-hidden-label">연구 질문
+              <textarea id="question" maxlength="4000" rows="7" placeholder="아세트아미노펜 500 mg 속방정제를 직접타정법으로 제조해라."></textarea>
             </label>
+            <div id="examples" class="examples" aria-label="예시 질문">
+              <button type="button" class="chip" data-example="아세트아미노펜 500 mg 속방정제를 직접타정법으로 제조해라.">아세트아미노펜 500 mg 직타 속방정</button>
+              <button type="button" class="chip" data-example="트리메타지딘 20 mg 정제, 후보 3개">트리메타지딘 20 mg 정제 후보 3개</button>
+              <button type="button" class="chip" data-example="메트포르민 500 mg 정제, MCC 20%, 크로스포비돈 4%, 스테아르산마그네슘 1%, 총 700 mg">성분·분량을 직접 지정</button>
+            </div>
             <button id="generate" type="button">조성표 생성</button>
+            <div id="message" class="message" role="status"></div>
           </section>
-          <div id="message" class="message" role="status"></div>
-          <div id="result-actions" class="result-actions" hidden>
-            <button id="save-result" class="secondary compact" type="button">이 결과 저장</button>
-            <span id="save-status" class="notice" role="status"></span>
-          </div>
-          <section id="results"></section>
-          <p id="review-notice" class="notice review-notice" hidden>연구 검토용 시제품입니다. 생성 결과는 반드시 사람이 검토해야 합니다.</p>
-          <section id="followup-panel" class="controls followup-panel" hidden aria-labelledby="followup-title">
-            <h2 id="followup-title">이 결과에 이어서 질문</h2>
+
+          <section id="followup-panel" class="pane followup-panel" hidden aria-labelledby="followup-title">
+            <h2 id="followup-title" class="pane-title">이어서 질문</h2>
             <p class="notice">조성을 바꾸라고 하면(예: "총중량 650 mg 으로") 요청을 고쳐 다시 생성합니다. 결과를 물으면(예: "왜 MCC 를 골랐어?") 현재 표의 근거로 답하고, 문장마다 근거인지 일반 지식인지 표시합니다.</p>
-            <div id="followup-log" class="followup-log" aria-live="polite"></div>
-            <label class="wide">후속 질문
+            <label class="wide visually-hidden-label">후속 질문
               <textarea id="followup-question" maxlength="4000" rows="3" placeholder="총중량을 650 mg 으로 바꿔 줘 / 왜 이 결합제를 골랐어?"></textarea>
             </label>
             <button id="followup" type="button">보내기</button>
           </section>
+        </aside>
+
+        <div class="bench-right">
+          <div id="result-actions" class="result-actions" hidden>
+            <button id="save-result" class="ghost compact" type="button">이 결과 저장</button>
+            <span id="save-status" class="notice" role="status"></span>
+          </div>
+          <div id="results-skeleton" class="skeleton" hidden aria-hidden="true">
+            <div class="sk-line w40"></div>
+            <div class="sk-block"></div>
+            <div class="sk-line w60"></div>
+            <div class="sk-block tall"></div>
+          </div>
+          <div id="results-empty" class="empty-state">
+            <h2>시작하기</h2>
+            <p>왼쪽에 주성분과 용량, 제형, 공정을 적고 <b>조성표 생성</b>을 누르세요. 성분명과 분량(mg·%)을 적으면 그대로 반영됩니다.</p>
+            <ol>
+              <li>지식 데이터베이스가 후보 조성을 계산합니다.</li>
+              <li>다섯 게이트가 사용량 범위·합계·필수 기능을 검증합니다.</li>
+              <li>AI 가 표를 해설하고, 문장마다 근거인지 일반 지식인지 표시합니다.</li>
+            </ol>
+          </div>
+          <section id="results"></section>
+          <div id="followup-log" class="followup-log" aria-live="polite"></div>
+          <p id="review-notice" class="notice review-notice" hidden>연구 검토용 시제품입니다. 생성 결과는 반드시 사람이 검토해야 합니다.</p>
         </div>
       </div>
+
+      <aside id="side-panel" class="side-panel" hidden aria-labelledby="panel-title">
+        <div class="panel-head">
+          <h2 id="panel-title">게이트 안내</h2>
+          <button id="close-panel" class="ghost compact" type="button">닫기</button>
+        </div>
+        <section id="gate-guide" class="panel-section" hidden>
+          <p class="notice">결과 카드의 게이트 칩을 눌러도 같은 설명이 나옵니다.</p>
+          <ol class="gate-list">
+            {% for gate in gate_help %}
+            <li>
+              <strong>{{ gate.title }}</strong>
+              <p>{{ gate.text }}</p>
+            </li>
+            {% endfor %}
+          </ol>
+        </section>
+        <section id="panel-saved" class="panel-section" hidden>
+          <p class="notice">저장 위치: <code>%LOCALAPPDATA%\PhramaProto\results</code>. 저장 파일에 API 키는 들어가지 않습니다. <b>열기</b>는 읽기 전용이고, 이어서 질문하려면 <b>이어서 질문</b>을 누르세요.</p>
+          <button id="refresh-results" class="ghost compact" type="button">목록 새로고침</button>
+          <ul id="results-list" class="results-list" aria-live="polite"></ul>
+        </section>
+      </aside>
+      <div id="panel-backdrop" class="panel-backdrop" hidden></div>
     </section>
 
     <div id="help-popover" class="help-popover" role="dialog" aria-labelledby="help-title" hidden>
       <p id="help-title" class="help-title"></p>
       <p id="help-body" class="help-body"></p>
-      <button id="help-close" class="secondary compact" type="button">닫기</button>
+      <button id="help-close" class="ghost compact" type="button">닫기</button>
     </div>
 
     <script id="model-catalog" type="application/json">{{ model_catalog | tojson }}</script>

@@ -292,8 +292,12 @@ def test_research_screen_contains_collapsed_five_gate_guide(app_factory) -> None
         assert help_text[gate["key"]] == {"title": gate["title"], "text": gate["text"]}
     assert "src:kg_role" in help_text and "basis:general" in help_text and "status:unresolved" in help_text
     assert "hidden" in probe.attrs("help-popover")
-    assert "숫자는 AI 가 만들지 않습니다." in probe.text("about-tool")
-    assert "open" not in probe.attrs("about-tool")
+    # 안내는 옆 패널(닫힌 상태)로 옮겼고, '일반 AI 와 다른 점' 패널은 없앴다.
+    assert "hidden" in probe.attrs("side-panel") and "hidden" in probe.attrs("gate-guide")
+    assert "about-tool" not in probe.elements
+    assert probe.text("open-gates") == "게이트 안내" and probe.text("open-saved") == "저장된 작업"
+    assert "hidden" not in probe.attrs("results-empty") and "시작하기" in probe.text("results-empty")
+    assert "hidden" in probe.attrs("results-skeleton")
 
 
 def test_generate_returns_one_real_xlsx_download_per_candidate(
@@ -427,6 +431,10 @@ def test_followup_refine_regenerates_from_the_revised_request(app_factory, monke
     assert data["action"] == "refine" and data["changed"] is True
     assert data["conversation_id"] == conversation_id
     assert data["html"].count("조성 후보 ") == 1 and "총중량 650mg" in data["html"]
+    assert "candidate-strip" not in data["html"]                    # 후보가 하나면 요약 띠 없음
+    assert "<nav class='candidate-strip'" in first.get_json()["html"]  # 후보 둘이면 요약 띠
+    assert first.get_json()["html"].count("href='#candidate-") == 2
+    assert 'id="candidate-1"' in first.get_json()["html"]
     assert len(data["downloads"]) == 1
     assert "후보 수: 2 → 1" in data["answer_html"] and "총중량: 자동 → 650 mg" in data["answer_html"]
     assert "후보 1개, 총중량 650 mg 으로." in data["answer_html"]

@@ -43,6 +43,12 @@ DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더
 | 8 | LLM 보다 품질 낮음 | **설명·(b)총중량 완료, (a)공정 규칙 미착수** | 사용자 총중량·분량 존중(3번과 같이), 해설층(이전 세션), '일반 AI 와 다른 점' 패널. 공정 규칙 JSON 설계는 `docs/design/liquid-dosage-forms.md` 하단 |
 | 9 | 작업 저장 | **완료(수동)** | '이 결과 저장' → `LOCALAPPDATA/PhramaProto/results/<시각>-<대화id8>/`(request.json·독립 result.html·explanation.json·followup.json·xlsx). 사이드바 '저장된 작업': 열기(읽기 전용)·이어서 질문(저장된 ParsedRequest 로 결정적 재계산, LLM 호출 없음, 다른 스냅샷이면 409)·삭제 |
 
+**디자인 전면 개편(2026-10-05, 사용자와 문답으로 결정)**: 연구 노트형(종이 톤 + 잉크 남색, DB 근거는 초록 유지), 작업대형 2단
+(왼쪽 고정 열에 질문·후속 질문, 오른쪽에 결과), 후보가 2개 이상이면 결과 상단에 후보 요약 띠(`candidate_strip_html`, `#candidate-N` 앵커),
+게이트 안내·저장된 작업은 상단 버튼으로 여는 옆 패널(`#side-panel`), 생성 중 스켈레톤·시작 안내(빈 상태), 예시 질문 칩, 종이 질감(`static/paper.svg`),
+파비콘, 건너뛰기 링크. 글꼴은 **Pretendard Variable 동봉**(`static/fonts/`, OFL, 2 MB — 릴리스 허용목록에 들어 있음). 다크는 검정이 아니라 어두운 세피아.
+'이 도구는 일반 AI 와 무엇이 다른가요?' 패널은 사용자 요청으로 삭제(README 에 내용 없음 — 평가자 8번 답은 해설 배지·근거 꼬리표·게이트 설명이 대신한다).
+
 부수 수정: 릴리스 허용목록에 빠져 있던 `pharma_proto/excel_export.py`, `generation/explanation.py` 추가(배포본에서 생성 요청이 ImportError 나던 버그).
 새 오류 코드: `REQUEST-FORM-001`, `CONVERSATION-001`, `RESULTS-001`, `RESULTS-IO-001`, `RESULTS-SNAPSHOT-001`, `PREFERENCES-IO-001`. `app.js` 의 `ERROR_MESSAGES` 가 코드 옆에 한국어 한 줄을 붙인다.
 
