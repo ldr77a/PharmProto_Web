@@ -108,3 +108,11 @@ DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더
 - DB 저장소: export 때 역할 추정으로 배합별 '가장 큰 희석제 %' 를 API 함량 구간(le5·5_10·10_25·25_50·gt50, `contracts.api_load_band`)별로 집계한 `lookup_filler_pct_ranges`(성분별 행은 표본 5 이상, 전체는 `*`). 계약 메서드 `filler_pct_range(ingredient, band)`. `SUPPORTED_SCHEMA_VERSIONS={3}`, 스냅샷 `20261005T070640Z`.
 - 앱: `Component.filler`(allocator 가 q.s. 희석제에 표시) → `gates/allowable_range.py` 가 filler 만 구간 분포로 심사, 표본 없으면 전체 범위. 표기 "KG 잔여채움·API ≤5%[p5~p95=…]".
 - 계약 파일 3개(contracts·snapshot·sqlite_repository)는 publish 로 복사된 것. 앱에서 고치지 말 것.
+
+## 기존 조성을 적은 질문 처리 (2026-10-05 추가, 커밋 6a923f2·9bcba32)
+
+- 증상: NDMA 질문에서 후보 1 엑셀에 D-만니톨이 없고 옥수수전분만 있었다. 파서가 희석제를 ['corn starch', 'D-mannitol'] 순으로 돌려주고 앱은 한 역할의 여러 성분을 '후보마다 하나씩' 쓰기 때문.
+- `candidate_selector._reroute_diluents_by_primary_role`: 희석제 목록 중 역할 사전 기본 역할이 붕해제·결합제·활택보조·활택제인 성분(옥수수전분→붕해제)은 그 역할로 옮긴다. 진짜 희석제가 하나도 안 남으면 그대로 둔다.
+- `ParsedRequest.excluded`: '포비돈 대신 MCC', '유당을 다른 희석제로' 같은 교체·제거 요청을 파서가 `excluded` 로 돌려주고, 선택기가 사용자 목록·DB 후보·검토 기본값 모두에서 뺀다(Gemini 스키마·해설 payload 에도 반영). 파싱 지시문에 '언급 성분 누락 금지·언급 순서 유지·제외 성분' 규칙 추가.
+- 코팅 역할 영문 표현 보강(film coating polymer, anti-tacking agent → glidant 등).
+- 검증: NDMA 질문 두 번 연속 후보 1 = MCC 결합제·탈크 활택제·HPMC 코팅·PEG·색소·옥수수전분 붕해제 7.5%·만니톨 q.s. 46%, 포비돈 없음.
