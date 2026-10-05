@@ -40,6 +40,16 @@ const resultsSkeleton = document.querySelector("#results-skeleton");
 const resultsEmpty = document.querySelector("#results-empty");
 const resumeKey = document.querySelector("#resume-key");
 const continueKeyButton = document.querySelector("#continue-key");
+const openFolderButton = document.querySelector("#open-results-folder");
+const resultsLocation = document.querySelector("#results-location");
+// 저장 위치 안내 문구는 서버가 운영체제에 맞게 준다(Windows: %LOCALAPPDATA%…, macOS: ~/Library/…).
+let resultsLocationHint = resultsLocation.textContent || "";
+
+function showLocation(hint) {
+  if (!hint) return;
+  resultsLocationHint = hint;
+  resultsLocation.textContent = hint;
+}
 // 서버 메모리에 키가 남아 있는 공급자(/health 의 providers). 새로고침해도 키를 다시 넣지 않게 안내한다.
 let configuredProviders = {};
 
@@ -487,11 +497,20 @@ function renderResultsList(items) {
 async function refreshResults() {
   try {
     const data = await jsonRequest("/api/results");
+    showLocation(data.location);
     renderResultsList(data.results || []);
   } catch (error) {
     renderResultsList([]);
   }
 }
+
+openFolderButton.addEventListener("click", async () => {
+  try {
+    await jsonRequest("/api/results/open", {method: "POST"});
+  } catch (error) {
+    message.textContent = describeError(error);
+  }
+});
 
 async function openResult(id) {
   try {
@@ -546,7 +565,8 @@ saveButton.addEventListener("click", async () => {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({conversation_id: conversationId}),
     });
-    saveStatus.textContent = `저장됨 (${data.result_id}) · 위치: %LOCALAPPDATA%\\PhramaProto\\results`;
+    showLocation(data.location);
+    saveStatus.textContent = `저장됨 (${data.result_id})` + (resultsLocationHint ? ` · 위치: ${resultsLocationHint}` : "");
     await refreshResults();
   } catch (error) {
     saveStatus.textContent = describeError(error);

@@ -433,10 +433,11 @@ def test_followup_refine_regenerates_from_the_revised_request(app_factory, monke
     assert data["action"] == "refine" and data["changed"] is True
     assert data["conversation_id"] == conversation_id
     assert data["html"].count("조성 후보 ") == 1 and "총중량 650mg" in data["html"]
-    assert "candidate-strip" not in data["html"]                    # 후보가 하나면 요약 띠 없음
-    assert "<nav class='candidate-strip'" in first.get_json()["html"]  # 후보 둘이면 요약 띠
-    assert first.get_json()["html"].count("href='#candidate-") == 2
-    assert 'id="candidate-1"' in first.get_json()["html"]
+    # 후보 카드는 접이식(details): 머리줄에 제목·상태·핵심 부형제·총중량, 기본은 펼침
+    assert first.get_json()["html"].count('<details class="card candidate"') == 2
+    assert 'id="candidate-1" open' in first.get_json()["html"]
+    assert first.get_json()["html"].count('<summary class="candidate-summary">') == 2
+    assert "candidate-strip" not in first.get_json()["html"]
     assert len(data["downloads"]) == 1
     assert "후보 수: 2 → 1" in data["answer_html"] and "총중량: 자동 → 650 mg" in data["answer_html"]
     assert "후보 1개, 총중량 650 mg 으로." in data["answer_html"]
@@ -572,6 +573,7 @@ def test_save_list_open_resume_and_delete_round_trip(app_factory, monkeypatch, t
     assert opened["html"] == first["html"] and opened["resumable"] is True
     assert opened["question"] == "아세트아미노펜 500 mg 정제" and opened["turns"][0]["kind"] == "question"
     assert str(tmp_path) not in json.dumps(opened) and str(tmp_path) not in json.dumps(listing)
+    assert str(tmp_path) not in saved.get_json()["location"]          # 응답에 실제 경로 없음
 
     resumed = client.post(f"/api/results/{result_id}/resume", json={"provider": "claude", "tier": "normal"})
 
@@ -582,7 +584,8 @@ def test_save_list_open_resume_and_delete_round_trip(app_factory, monkeypatch, t
     assert service.explain_calls == 1 and calls == [1, 1]                 # LLM 없이 결정적 재계산
 
     assert client.delete(f"/api/results/{result_id}").get_json() == {"deleted": True}
-    assert client.get("/api/results").get_json() == {"results": []}
+    emptied = client.get("/api/results").get_json()
+    assert emptied["results"] == [] and str(tmp_path) not in emptied["location"]
     assert client.get(f"/api/results/{result_id}").status_code == 404
 
 

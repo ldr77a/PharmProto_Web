@@ -146,6 +146,28 @@ def test_invalid_ids_are_rejected_without_touching_disk(tmp_path: Path, bad: str
     assert not (tmp_path / "results").exists()
 
 
+def test_location_hint_hides_real_paths_outside_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pharma_proto.results_store.os.name", "posix")
+    outside = _store(tmp_path).location_hint()
+    assert str(tmp_path) not in outside and "PhramaProto/results" in outside
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    under_home = ResultsStore(tmp_path / "Library" / "PhramaProto" / "results", css_text=_CSS, app_version="0.1.0")
+    assert under_home.location_hint() == "~/Library/PhramaProto/results"
+
+    monkeypatch.setattr("pharma_proto.results_store.os.name", "nt")
+    assert _store(tmp_path).location_hint() == r"%LOCALAPPDATA%\PhramaProto\results"
+
+
+def test_open_folder_creates_root_and_calls_opener(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    opened: list[Path] = []
+
+    store.open_folder(opener=opened.append)
+
+    assert opened == [tmp_path / "results"] and (tmp_path / "results").is_dir()
+
+
 def test_delete_removes_folder_and_unknown_returns_false(tmp_path: Path) -> None:
     store = _store(tmp_path)
     result_id = _save(store)

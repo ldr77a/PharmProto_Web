@@ -67,8 +67,8 @@
       <div class="workbench">
         <aside class="bench-left" aria-label="질문 입력">
           <section class="pane" aria-labelledby="ask-title">
-            <h2 id="ask-title" class="pane-title">연구 질문</h2>
-            <label class="wide visually-hidden-label">연구 질문
+            <h2 id="ask-title" class="pane-title">신약 배합 질문</h2>
+            <label class="wide visually-hidden-label">신약 배합 질문
               <textarea id="question" maxlength="4000" rows="7" placeholder="아세트아미노펜 500 mg 속방정제를 직접타정법으로 제조해라."></textarea>
             </label>
             <div id="examples" class="examples" aria-label="예시 질문">
@@ -133,8 +133,11 @@
           </ol>
         </section>
         <section id="panel-saved" class="panel-section" hidden>
-          <p class="notice">저장 위치: <code>%LOCALAPPDATA%\PhramaProto\results</code>. 저장 파일에 API 키는 들어가지 않습니다. <b>열기</b>는 읽기 전용이고, 이어서 질문하려면 <b>이어서 질문</b>을 누르세요.</p>
-          <button id="refresh-results" class="ghost compact" type="button">목록 새로고침</button>
+          <p class="notice">저장 위치: <code id="results-location">{{ results_location | default('') }}</code>. 저장 파일에 API 키는 들어가지 않습니다. <b>열기</b>는 읽기 전용이고, 이어서 질문하려면 <b>이어서 질문</b>을 누르세요.</p>
+          <div class="panel-actions">
+            <button id="refresh-results" class="ghost compact" type="button">목록 새로고침</button>
+            <button id="open-results-folder" class="ghost compact" type="button">저장 폴더 열기</button>
+          </div>
           <ul id="results-list" class="results-list" aria-live="polite"></ul>
         </section>
       </aside>

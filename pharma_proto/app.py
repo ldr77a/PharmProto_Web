@@ -183,6 +183,7 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             theme=preferences.load()["theme"],
             gate_help=GATES,              # 사이드바 게이트 안내와 클릭 설명이 같은 문장을 쓴다
             help_text=help_entries(),
+            results_location=results_store.location_hint(),
         )
 
     @app.get("/api/preferences")
@@ -468,11 +469,23 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             raise AppError(RESULTS_IO_ERROR, 500) from None
         conversation.result_id = result_id
         conversations.replace(conversation)
-        return jsonify(result_id=result_id)
+        return jsonify(result_id=result_id, location=results_store.location_hint())
 
     @app.get("/api/results")
     def list_results():
-        return jsonify(results=[asdict(item) for item in results_store.list()])
+        return jsonify(
+            results=[asdict(item) for item in results_store.list()],
+            location=results_store.location_hint(),
+        )
+
+    @app.post("/api/results/open")
+    def open_results_folder():
+        """저장 폴더를 운영체제 탐색기로 연다(로컬 앱이라 가능). 실패해도 코드만."""
+        try:
+            results_store.open_folder()
+        except OSError:
+            raise AppError(RESULTS_IO_ERROR, 500) from None
+        return jsonify(ok=True)
 
     @app.get("/api/results/<result_id>")
     def get_result(result_id: str):

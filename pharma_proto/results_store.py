@@ -14,9 +14,13 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import shutil
+import subprocess
+import sys
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -81,11 +85,39 @@ def _fragment_of(page: str) -> str:
     return page[start + len(RESULT_FRAGMENT_START):end]
 
 
+def _default_opener(path: Path) -> None:
+    """운영체제의 파일 탐색기로 폴더를 연다(Windows 탐색기 / macOS Finder / Linux 기본 앱)."""
+    if os.name == "nt":
+        os.startfile(str(path))  # type: ignore[attr-defined]
+    elif sys.platform == "darwin":
+        subprocess.run(["open", str(path)], check=False)
+    else:
+        subprocess.run(["xdg-open", str(path)], check=False)
+
+
 class ResultsStore:
     def __init__(self, root: Path | str, *, css_text: str, app_version: str) -> None:
         self._root = Path(root)
         self._css_text = css_text
         self._app_version = app_version
+
+    # --- 위치 안내 ---------------------------------------------------------------------
+    def location_hint(self) -> str:
+        """화면에 보여 줄 저장 위치. Windows 는 환경변수 표기, 홈 아래면 ~ 로 줄여 쓴다.
+
+        그 밖의 경로(예: 테스트의 임시 폴더)는 폴더 이름만 — 응답에 실제 경로를 싣지 않는 규칙.
+        """
+        if os.name == "nt":
+            return r"%LOCALAPPDATA%\PhramaProto\results"
+        try:
+            return "~/" + self._root.resolve().relative_to(Path.home().resolve()).as_posix()
+        except ValueError:
+            return "PhramaProto/results (앱 데이터 폴더)"
+
+    def open_folder(self, opener: Callable[[Path], None] | None = None) -> None:
+        """저장 폴더를 탐색기로 연다. 없으면 먼저 만든다(사용자가 찾기 쉽게)."""
+        self._root.mkdir(parents=True, exist_ok=True)
+        (opener or _default_opener)(self._root)
 
     # --- 경로 안전 -----------------------------------------------------------------------
     def _dir_for(self, result_id: str) -> Path | None:

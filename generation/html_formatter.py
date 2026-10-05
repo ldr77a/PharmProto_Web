@@ -334,49 +334,30 @@ def candidate_html(cand, explanation=None) -> str:
     evidence_html = _evidence_html(cand)
     explain_html = explanation_html(explanation)
 
+    # 카드는 접이식: 머리줄(제목·상태·핵심 부형제·총중량)을 누르면 표·근거·해설이 접히고 펼쳐진다.
+    # 인쇄 때는 app.js 의 beforeprint 가 접힌 것을 모두 펼친다.
     return f"""
-    <div class="card candidate" id="candidate-{cand.idx}">
-      <div class="card-head">
+    <details class="card candidate" id="candidate-{cand.idx}" open>
+      <summary class="candidate-summary">
         <h3>조성 후보 {cand.idx}</h3>
+        {_help_button(f"status:{cand.status}", f"badge {badge_cls}", html.escape(badge))}
+        <span class="strip-picks">{html.escape(picks)}</span>
+        <span class="strip-total">{cand.total_mg:.0f} mg</span>
+      </summary>
+      <div class="candidate-body">
         <div class="card-actions">
           <button class="download-xlsx secondary compact" type="button" data-candidate-index="{cand.idx}" disabled>엑셀 저장</button>
-          {_help_button(f"status:{cand.status}", f"badge {badge_cls}", html.escape(badge))}
         </div>
+        <table>
+          <thead><tr><th>성분</th><th>기능</th><th>mg</th><th>%</th><th>근거</th></tr></thead>
+          <tbody>{''.join(rows)}</tbody>
+        </table>
+        {evidence_html}
+        <div class="gates">게이트 검증: {gate_syms}</div>
+        {notes_html}
+        {explain_html}
       </div>
-      <div class="pick">{html.escape(picks)}</div>
-      <table>
-        <thead><tr><th>성분</th><th>기능</th><th>mg</th><th>%</th><th>근거</th></tr></thead>
-        <tbody>{''.join(rows)}</tbody>
-      </table>
-      {evidence_html}
-      <div class="gates">게이트 검증: {gate_syms}</div>
-      {notes_html}
-      {explain_html}
-    </div>"""
-
-
-_STRIP_STATUS = {"pass": ("ok", "통과"), "warning": ("warn", "조건부"), "unresolved": ("bad", "미해결")}
-
-
-def candidate_strip_html(candidates) -> str:
-    """결과 맨 위의 후보 요약 띠 — 후보마다 상태·핵심 부형제·총중량 한 줄, 누르면 그 카드로 이동.
-
-    후보가 하나뿐이면 띄우지 않는다. '조성 후보 N' 문구는 카드 제목에만 두고 여기서는 '후보 N' 으로 쓴다.
-    """
-    if len(candidates) < 2:
-        return ""
-    rows = []
-    for cand in candidates:
-        badge_cls, label = _STRIP_STATUS.get(cand.status, ("warn", cand.status))
-        picks = " · ".join(f"{_FUNC_KO.get(f, f)} {_title_en(n)}" for f, n in cand.pick.items())
-        rows.append(
-            f"<a href='#candidate-{cand.idx}'>"
-            f"<span class='strip-idx'>후보 {cand.idx}</span>"
-            f"<span class='badge {badge_cls}'>{label}</span>"
-            f"<span class='strip-picks'>{html.escape(picks)}</span>"
-            f"<span class='strip-total'>{cand.total_mg:.0f} mg</span></a>"
-        )
-    return "<nav class='candidate-strip' aria-label='후보 요약'>" + "".join(rows) + "</nav>"
+    </details>"""
 
 
 def _amount_text(name: str, amount) -> str:
@@ -523,6 +504,5 @@ def results_html(spec, candidates, explanation=None, explanation_error: str | No
         print_header_html(meta)
         + f"<div class='meta'>{meta_line} · 후보 {len(candidates)}개</div>"
         + request_summary_html(spec, candidates)
-        + candidate_strip_html(candidates)
         + notice + explanation_header_html(explanation) + cards
     )

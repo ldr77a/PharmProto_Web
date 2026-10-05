@@ -198,24 +198,21 @@ button[aria-busy="true"] { cursor: progress; }
 .request-summary dd { margin: 0; overflow-wrap: anywhere; }
 .request-summary dd.missing { color: var(--warn); font-weight: 600; }
 
-/* 후보 요약 띠 — 누르면 그 카드로 */
-.candidate-strip { display: grid; gap: 6px; margin: 14px 0 4px; }
-.candidate-strip a {
-  display: grid; grid-template-columns: 64px auto minmax(0, 1fr) auto; align-items: center; gap: 12px;
-  padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
-  color: inherit; text-decoration: none; transition: border-color .18s var(--ease), transform .18s var(--ease);
-}
-.candidate-strip a:hover { border-color: var(--primary); transform: translateX(2px); }
-.strip-idx { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--primary); }
-.strip-picks { color: var(--text-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.strip-total { font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; }
-
 /* 후보 카드 — 종이 한 장: 테두리만, 그림자 없음 */
 .card { padding: 20px 24px 22px; margin: 16px 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow-x: auto; scroll-margin-top: 16px; }
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--rule); }
-.card-head h3 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.015em; }
+/* 접이식 머리줄: 제목·상태·핵심 부형제·총중량. 누르면 표·근거·해설이 접힌다 */
+.candidate-summary { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--rule); cursor: pointer; list-style: none; }
+.candidate-summary::-webkit-details-marker { display: none; }
+.candidate-summary h3 { position: relative; margin: 0; padding-left: 20px; font-size: 19px; font-weight: 700; letter-spacing: -.015em; }
+.candidate-summary h3::before { content: ""; position: absolute; left: 2px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--primary); border-bottom: 2px solid var(--primary); transform: translateY(-70%) rotate(45deg); transition: transform .18s var(--ease); }
+.candidate:not([open]) .candidate-summary h3::before { transform: translateY(-50%) rotate(-45deg); }
+.candidate:not([open]) .candidate-summary { border-bottom: 0; padding-bottom: 0; }
+.candidate-summary:hover h3 { color: var(--primary); }
+.strip-picks { color: var(--text-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.strip-total { font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; }
+.candidate-body { margin-top: 12px; }
+.candidate-body .card-actions { display: flex; justify-content: flex-end; }
 .card-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.pick { margin-top: 10px; color: var(--text-muted); font-size: 13.5px; }
 
 /* 꼬리표: 알약 대신 작은 사각 라벨 + 왼쪽 잉크 줄 */
 .badge, .g, .basis, .followup-label {
@@ -317,7 +314,7 @@ button.g.fail:hover:not(:disabled), button.badge.bad:hover:not(:disabled) { back
 .panel-head h2 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
 .panel-section { display: grid; gap: 12px; align-content: start; padding: 16px 20px 28px; }
 .panel-section .notice { margin: 0; }
-.panel-section #refresh-results { justify-self: start; }
+.panel-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .gate-list { display: grid; margin: 0; padding: 0 0 0 22px; }
 .gate-list li { padding: 10px 0; border-top: 1px solid var(--rule); }
 .gate-list li:first-child { border-top: 0; padding-top: 0; }
@@ -348,8 +345,8 @@ button.g.fail:hover:not(:disabled), button.badge.bad:hover:not(:disabled) { back
   .setup-card { margin-top: 4vh; padding: 24px 20px; }
   .card { padding: 14px; }
   th, td { padding: 8px; }
-  .candidate-strip a { grid-template-columns: 56px auto; }
-  .strip-picks, .strip-total { grid-column: 1 / -1; }
+  .candidate-summary { grid-template-columns: auto auto; }
+  .strip-picks, .strip-total { grid-column: 1 / -1; white-space: normal; }
 }
 
 /* ── 인쇄: 입력·상단 바·패널은 숨기고 결과와 질의응답만, 항상 밝은 종이색으로 ── */
@@ -376,7 +373,10 @@ button.g.fail:hover:not(:disabled), button.badge.bad:hover:not(:disabled) { back
   .print-header dt { color: var(--text-muted); font-weight: 600; }
   .print-header dd { margin: 0; overflow-wrap: anywhere; }
   .print-disclaimer { margin: 10px 0 0; font-size: 12px; color: var(--text-muted); }
-  .candidate-strip a { border-color: var(--border); transform: none; }
+  .candidate-summary { cursor: default; }
+  .candidate-summary h3::before { display: none; }
+  .candidate-summary h3 { padding-left: 0; }
+  .strip-picks { white-space: normal; }
   .card, .followup-log .card { break-inside: avoid; border-color: var(--border); }
   #results > * { animation: none; }
   tbody tr:hover { background: transparent; }

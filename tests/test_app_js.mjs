@@ -101,6 +101,8 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
     "#results-empty": fakeElement(),
     "#resume-key": fakeElement({hidden: true}),
     "#continue-key": fakeElement(),
+    "#open-results-folder": fakeElement(),
+    "#results-location": fakeElement({textContent: "~/Library/Application Support/PhramaProto/results"}),
     "#followup-question": fakeElement(),
     "#followup-log": fakeElement(),
     "#followup": fakeElement(),
@@ -359,7 +361,8 @@ test("저장 버튼은 대화를 저장하고 목록을 갱신하며, 열기는 
   const harness = browserHarness({
     generatePayload: {html: card("처음"), downloads, conversation_id: "a".repeat(32)},
     routes: {
-      "POST /api/results": {result_id: resultId},
+      "POST /api/results": {result_id: resultId, location: "~/Library/Application Support/PhramaProto/results"},
+      "POST /api/results/open": {ok: true},
       "GET /api/results": () => ({results: deleted ? [] : [summary]}),
       [`GET /api/results/${resultId}`]: {id: resultId, saved_at: summary.saved_at, html: card("저장본"), downloads,
         turns: [{role: "assistant", kind: "answer", text: "x", html: "<div class='card followup'>x</div>"}], resumable: true},
@@ -374,7 +377,11 @@ test("저장 버튼은 대화를 저장하고 목록을 갱신하며, 열기는 
   const [, saveOptions] = harness.fetchCalls.find(([url, options]) => url === "/api/results" && options.method === "POST");
   assert.deepEqual(JSON.parse(saveOptions.body), {conversation_id: "a".repeat(32)});
   assert.ok(harness.elements["#save-status"].textContent.includes("저장됨"));
+  assert.ok(harness.elements["#save-status"].textContent.includes("~/Library/Application Support/PhramaProto/results"));
   assert.equal(harness.elements["#results-list"].children.length, 1);
+
+  await harness.elements["#open-results-folder"].dispatch("click");
+  assert.ok(harness.fetchCalls.some(([url, options]) => url === "/api/results/open" && options.method === "POST"));
 
   const [openButton, , deleteButton] = harness.elements["#results-list"].children[0].children[2].children;
   await openButton.dispatch("click");
