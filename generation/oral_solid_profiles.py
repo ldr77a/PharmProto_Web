@@ -207,6 +207,10 @@ _ROLE_NORMALIZED_ALIASES = {
     # LLM 이 돌려주는 영문 역할 표현 → 생성기 역할. ROLE_ALIASES(계약 파일)에 없는 표면형만 여기서 받는다.
     "film_coating": "coating", "film_coating_agent": "coating", "coating_agent": "coating",
     "film_coat": "coating", "tablet_film_coating": "coating", "seal_coating": "coating",
+    "film_coating_polymer": "coating", "coating_polymer": "coating", "film_former": "coating",
+    "film_forming_polymer": "coating", "film_coating_material": "coating", "film_coating_base": "coating",
+    "anti_tacking_agent": "glidant", "antitacking_agent": "glidant", "anti_sticking_agent": "glidant",
+    "antiadhesive": "glidant", "anti_adhesive": "glidant", "detackifier": "glidant", "anti_tack_agent": "glidant",
     "colorant": "colorant", "colourant": "colorant", "coloring_agent": "colorant", "colouring_agent": "colorant",
     "color": "colorant", "colour": "colorant", "pigment": "colorant", "dye": "colorant", "lake": "colorant",
     "filler": "diluent", "bulking_agent": "diluent", "dry_binder": "binder", "anti_adherent": "glidant",

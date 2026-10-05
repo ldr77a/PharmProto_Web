@@ -27,7 +27,9 @@ SYSTEM_INSTRUCTION = (
     "list that ingredient under its role (binder, disintegrant, diluent, lubricant or "
     "additional_roles). Put API doses in apis[].dose_mg and a stated total tablet or capsule "
     "weight in target_total_mg. Never invent amounts; leave a field empty when the user did not "
-    "state it."
+    "state it. Include every excipient the user names, including those of an existing formulation "
+    "that is being revised, each under its stated role, and keep the order in which they were "
+    "mentioned. Put film-coating ingredients under additional_roles with role 'film coating'."
 )
 
 EXPLAIN_INSTRUCTION = (

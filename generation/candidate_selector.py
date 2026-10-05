@@ -50,6 +50,37 @@ def _split_coating_system(spec, repository, source_map: dict) -> None:
     spec.excipient_choices["coating"] = keep or listed[:1]
 
 
+_DILUENT_REROUTE_ROLES = ("disintegrant", "binder", "glidant", "lubricant")
+
+
+def _reroute_diluents_by_primary_role(spec, repository, source_map: dict) -> None:
+    """'옥수수전분, D-만니톨' 처럼 기존 조성을 그대로 적으면 둘 다 희석제 후보로 들어와 후보마다 하나씩만 쓰인다.
+
+    역할 사전의 기본 역할이 희석제가 아닌 것(옥수수전분 → 붕해제)은 그 역할 자리로 옮겨, 후보 1 에 둘 다 들어가게 한다.
+    진짜 희석제가 하나도 남지 않으면 건드리지 않는다.
+    """
+    listed = list(spec.excipient_choices.get("diluent", ()))
+    primary = getattr(repository, "primary_role", None)
+    if len(listed) < 2 or not callable(primary):
+        return
+    keep: list[str] = []
+    moved: list[tuple[str, str]] = []
+    for name in listed:
+        role = primary(name)
+        if role in _DILUENT_REROUTE_ROLES:
+            moved.append((name, role))
+        else:
+            keep.append(name)
+    if not keep or not moved:
+        return
+    for name, role in moved:
+        bucket = spec.excipient_choices.setdefault(role, [])
+        if name.casefold() not in {item.casefold() for item in bucket}:
+            bucket.append(name)
+        source_map[role] = "user"
+    spec.excipient_choices["diluent"] = keep
+
+
 def complete_excipient_choices(
     spec,
     repository: KnowledgeRepository,
@@ -70,6 +101,7 @@ def complete_excipient_choices(
         spec.selection_sources = source_map
 
     _split_coating_system(spec, repository, source_map)
+    _reroute_diluents_by_primary_role(spec, repository, source_map)
 
     lookup = getattr(repository, "ingredient_candidates", None)
     role_lookup = getattr(repository, "role_candidates", None)

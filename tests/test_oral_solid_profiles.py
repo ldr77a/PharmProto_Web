@@ -43,6 +43,7 @@ def test_process_text_with_binder_solution_does_not_reject():
     ("colorant", "colorant"), ("coloring agent", "colorant"), ("pigment", "colorant"), ("lake", "colorant"),
     ("filler", "diluent"), ("dry binder", "binder"), ("anti-adherent", "glidant"),
     ("코팅제", "coating"), ("binder", "binder"), ("tablet_coating", "coating"),
+    ("film coating polymer", "coating"), ("anti-tacking agent", "glidant"), ("film former", "coating"),
 ])
 def test_llm_role_phrases_map_to_generator_roles(value, expected):
     assert canonical_role(value) == expected
@@ -69,3 +70,40 @@ def test_coating_system_list_is_split_by_role():
     assert spec.excipient_choices["glidant"] == ["talc"]
     assert spec.excipient_choices["colorant"] == ["Sunset Yellow FCF aluminum lake"]   # 사전에 없어도 이름 규칙
     assert spec.selection_sources["plasticizer"] == "user" and spec.selection_sources["colorant"] == "user"
+
+
+def test_non_diluent_in_diluent_list_moves_to_its_primary_role():
+    from types import SimpleNamespace
+
+    from generation.candidate_selector import complete_excipient_choices
+    from tests.product.fakes import FakeKnowledge
+
+    spec = SimpleNamespace(
+        apis=[SimpleNamespace(name="trimetazidine hydrochloride")], dosage_form="film-coated tablet",
+        process="direct compression", release_profile="",
+        excipient_choices={"diluent": ["starch", "mannitol"], "binder": ["microcrystalline cellulose"]},
+        selection_sources={},
+    )
+    repository = FakeKnowledge(primary_roles={"starch": "disintegrant", "mannitol": "diluent",
+                                              "microcrystalline cellulose": "diluent"})
+
+    complete_excipient_choices(spec, repository)
+
+    assert spec.excipient_choices["diluent"] == ["mannitol"]          # 후보 1 희석제 = 만니톨
+    assert spec.excipient_choices["disintegrant"] == ["starch"]       # 옥수수전분은 붕해제 자리로
+    assert spec.excipient_choices["binder"] == ["microcrystalline cellulose"]   # 사용자가 결합제로 적은 MCC 는 그대로
+    assert spec.selection_sources["disintegrant"] == "user"
+
+
+def test_diluent_list_is_left_alone_when_nothing_true_diluent_remains():
+    from types import SimpleNamespace
+
+    from generation.candidate_selector import complete_excipient_choices
+    from tests.product.fakes import FakeKnowledge
+
+    spec = SimpleNamespace(
+        apis=[SimpleNamespace(name="x")], dosage_form="tablet", process="", release_profile="",
+        excipient_choices={"diluent": ["starch", "pregelatinized starch"]}, selection_sources={},
+    )
+    complete_excipient_choices(spec, FakeKnowledge(primary_roles={"starch": "disintegrant", "pregelatinized starch": "binder"}))
+    assert spec.excipient_choices["diluent"] == ["starch", "pregelatinized starch"]
