@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from pharma_proto.knowledge.function_taxonomy import ROLE_ALIASES
@@ -125,6 +126,48 @@ _NON_ORAL_SOLID = (
 )
 
 
+_ORAL_SOLID_TOKENS = (
+    "tablet", "caplet", "capsule", "granule", "pellet", "bead", "powder", "sachet", "lozenge",
+    "정제", "정", "캡슐", "과립", "펠렛", "비드", "산제", "분말",
+)
+_NON_ORAL_SOLID_RE = re.compile(r"\b(?:" + "|".join(re.escape(t) for t in _NON_ORAL_SOLID) + r")\b")
+
+
+def is_oral_solid(dosage_form: str) -> bool:
+    """제형 문자열만 보고 판단한다(공정 설명의 '결합액·코팅액' 같은 단어에 끌려가지 않게).
+
+    'tablet·capsule·정제' 같은 고형제 단어가 있으면 그대로 통과하고, 그 단어가 없을 때만
+    'solution·gel' 같은 비고형 단어를 단어 경계로 찾는다(dissolution·gelatin 은 걸리지 않는다).
+    """
+    text = (dosage_form or "").strip().lower()
+    if not text:
+        return True
+    if any(token in text for token in _ORAL_SOLID_TOKENS):
+        return True
+    return _NON_ORAL_SOLID_RE.search(text) is None
+
+
+# 코팅 '시스템' 으로 한꺼번에 적힌 성분을 역할별로 가르는 이름 규칙(역할 사전에 없을 때의 보조).
+COATING_SYSTEM_NAME_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("plasticizer", ("polyethylene glycol", "peg", "macrogol", "triethyl citrate", "triacetin",
+                     "propylene glycol", "glycerin", "glycerol", "dibutyl sebacate", "acetyl tributyl citrate")),
+    ("colorant", ("lake", "iron oxide", "fd&c", "d&c", "pigment", "dye", "color", "colour", "레이크", "색소", "산화철")),
+    ("opacifier", ("titanium dioxide", "titanium oxide", "산화티탄", "이산화티탄")),
+    ("glidant", ("talc", "탈크")),
+)
+
+
+def coating_system_role(name: str, primary_role: str | None = None) -> str:
+    """코팅 목록 안의 성분 하나가 맡는 역할. 역할 사전의 기본 역할이 있으면 그것, 없으면 이름 규칙, 그래도 없으면 coating."""
+    if primary_role in ("plasticizer", "colorant", "opacifier", "glidant", "coating", "film_forming_agent"):
+        return "coating" if primary_role == "film_forming_agent" else primary_role
+    text = name.strip().lower()
+    for role, hints in COATING_SYSTEM_NAME_HINTS:
+        if any(hint in text for hint in hints):
+            return role
+    return "coating"
+
+
 def role_aliases(role: str) -> tuple[str, ...]:
     return ROLE_ALIASES.get(role, (role,))
 
@@ -160,10 +203,23 @@ _ROLE_INPUT_ALIASES = {
 }
 
 
+_ROLE_NORMALIZED_ALIASES = {
+    # LLM 이 돌려주는 영문 역할 표현 → 생성기 역할. ROLE_ALIASES(계약 파일)에 없는 표면형만 여기서 받는다.
+    "film_coating": "coating", "film_coating_agent": "coating", "coating_agent": "coating",
+    "film_coat": "coating", "tablet_film_coating": "coating", "seal_coating": "coating",
+    "colorant": "colorant", "colourant": "colorant", "coloring_agent": "colorant", "colouring_agent": "colorant",
+    "color": "colorant", "colour": "colorant", "pigment": "colorant", "dye": "colorant", "lake": "colorant",
+    "filler": "diluent", "bulking_agent": "diluent", "dry_binder": "binder", "anti_adherent": "glidant",
+    "antiadherent": "glidant", "flow_aid": "glidant", "super_disintegrant": "disintegrant",
+}
+
+
 def canonical_role(value: str) -> str:
     normalized = "_".join(value.strip().lower().replace("-", " ").split())
     if value.strip() in _ROLE_INPUT_ALIASES:
         return _ROLE_INPUT_ALIASES[value.strip()]
+    if normalized in _ROLE_NORMALIZED_ALIASES:
+        return _ROLE_NORMALIZED_ALIASES[normalized]
     if normalized in ROLE_ALIASES:
         return normalized
     for canonical, aliases in ROLE_ALIASES.items():
@@ -178,7 +234,7 @@ def resolve_profile(
     release_profile: str = "",
 ) -> OralSolidProfile:
     text = " ".join((dosage_form, process, release_profile)).strip().lower()
-    if any(token in text for token in _NON_ORAL_SOLID):
+    if not is_oral_solid(dosage_form):
         raise UnsupportedDosageForm(f"경구 고형제 범위 밖의 제형입니다: {dosage_form}")
     if any(token in text for token in ("orally disintegrating", "oral disintegrating", "orodispersible", "odt", "구강붕해")):
         key = "orally_disintegrating_tablet"
@@ -204,12 +260,15 @@ def resolve_profile(
 
 
 __all__ = [
+    "COATING_SYSTEM_NAME_HINTS",
     "CURATED_DEFAULTS",
-    "OralSolidProfile",
     "PROFILES",
     "ROLE_ALIASES",
+    "OralSolidProfile",
     "UnsupportedDosageForm",
     "canonical_role",
+    "coating_system_role",
+    "is_oral_solid",
     "resolve_profile",
     "role_aliases",
 ]

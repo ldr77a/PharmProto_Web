@@ -5,6 +5,7 @@ from __future__ import annotations
 from generation.oral_solid_profiles import (
     CURATED_DEFAULTS,
     OralSolidProfile,
+    coating_system_role,
     resolve_profile,
     role_aliases,
 )
@@ -26,6 +27,29 @@ def _dedupe(values: list[str], excluded: set[str], limit: int) -> list[str]:
     return selected
 
 
+def _split_coating_system(spec, repository, source_map: dict) -> None:
+    """사용자가 '코팅: HPMC, PEG, talc, 색소' 처럼 코팅 시스템을 통째로 적은 경우.
+
+    네 성분이 후보마다 돌아가며 '코팅제' 자리를 차지하지 않도록, 역할 사전의 기본 역할(없으면 이름 규칙)로
+    가소제·착색제·불투명화제·활택보조 자리로 옮기고 코팅 자리에는 피막 형성제만 남긴다.
+    """
+    listed = list(spec.excipient_choices.get("coating", ()))
+    if len(listed) < 2:
+        return
+    primary = getattr(repository, "primary_role", None)
+    keep: list[str] = []
+    for name in listed:
+        role = coating_system_role(name, primary(name) if callable(primary) else None)
+        if role == "coating":
+            keep.append(name)
+            continue
+        bucket = spec.excipient_choices.setdefault(role, [])
+        if name.casefold() not in {item.casefold() for item in bucket}:
+            bucket.append(name)
+        source_map[role] = "user"
+    spec.excipient_choices["coating"] = keep or listed[:1]
+
+
 def complete_excipient_choices(
     spec,
     repository: KnowledgeRepository,
@@ -44,6 +68,8 @@ def complete_excipient_choices(
     if source_map is None:
         source_map = {}
         spec.selection_sources = source_map
+
+    _split_coating_system(spec, repository, source_map)
 
     lookup = getattr(repository, "ingredient_candidates", None)
     role_lookup = getattr(repository, "role_candidates", None)

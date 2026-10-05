@@ -93,3 +93,11 @@ DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더
 - effort high · 전체 해설: 91s, 출력 14k 토큰 → effort low · 분량 제한 · 후보 2 이후는 차이점만: 26~27s.
 - 적용 위치: `llm/service.py` `_structured_call(effort=...)`(Claude 만 output_config.effort), `EXPLAIN_INSTRUCTION` 8번 규칙.
 - (적용됨) 해설은 `/api/generate` 밖으로 뺐다. 표는 파싱+생성만으로 뜨고, app.js 가 후보 1 은 자동으로, 나머지는 '해설 보기' 버튼으로 `POST /api/explain {conversation_id, candidate_idx}` 를 부른다. 서버는 후보 하나짜리 payload 로 해설을 받아 `conversation.explanation.candidates` 에 누적하고 `conversation.html` 을 다시 그린다(저장·후속·재개가 같은 해설을 본다). 저장은 해설이 붙은 뒤에 해야 저장본에 들어간다. 후속 '수정' 재생성 뒤에는 후보 1 해설을 다시 자동으로 부른다. 저장본 '열기'(대화 없음)는 버튼을 숨긴다.
+
+## 제형 거부·코팅 목록·후보 조합 (2026-10-05 추가)
+
+- `REQUEST-FORM-001`(경구 고형제만 지원) 오탐 수정: 비고형 판정이 질문 전체가 아니라 `dosage_form` 만 보고, 단어 경계로 찾는다(`is_oral_solid`). '포비돈 결합액(binder solution)', 'dissolution', 'gelatin' 에 더 이상 걸리지 않는다. 고형제 단어(tablet·capsule·정제…)가 있으면 무조건 통과.
+- LLM 이 돌려주는 영문 역할 표현(`film coating`, `colorant`, `pigment`, `filler`, `dry binder` …)을 생성기 역할로 매핑(`_ROLE_NORMALIZED_ALIASES`). 전에는 `film_coating_agent` 가 역할 이름 그대로 표에 찍혔다.
+- 사용자가 '코팅: HPMC, PEG6000, 탈크, 색소' 처럼 코팅 시스템을 통째로 적으면 역할 사전(없으면 이름 규칙)으로 가소제·활택보조·착색제 자리로 가르고 코팅 자리엔 피막 형성제만 남긴다(`candidate_selector._split_coating_system`, `coating_system_role`).
+- `_distinct_picks`: 같은 성분이 두 역할에 걸리면(활택제 talc·활택보조 talc) 조합을 통째로 버리지 않고 그 역할만 다음 선택지로 넘기거나 뺀다. 후보 1 이 사용자가 첫 번째로 적은 성분을 그대로 쓴다.
+- 검증 사례: NDMA 질문(트리메타지딘 20 mg, 95 mg, 직타/건식과립, MCC PH102). 후보 1 = MCC 결합제·talc 활택제·HPMC 코팅·PEG 가소제·색소·CCS·mannitol q.s. 해설은 2차 아민과 아질산염 불순물에 의한 니트로소아민 위험을 '일반 지식'으로 언급한다.

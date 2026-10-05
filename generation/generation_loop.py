@@ -56,11 +56,22 @@ def _distinct_picks(spec, k: int) -> list[dict]:
     lists = [spec.excipient_choices[f] for f in funcs]
     combos: list[dict] = []
     for index in range(k):
-        values = tuple(choices[index % len(choices)] for choices in lists)
-        if len({value.casefold() for value in values}) != len(values):
-            continue
-        pick = dict(zip(funcs, values))
-        if pick not in combos:
+        # 역할 순서대로 index 번째 선택지를 쓰되, 앞 역할이 이미 쓴 성분(예: 활택제 talc 와 활택보조 talc)이면
+        # 그 역할만 다음 선택지로 넘기고, 남는 선택지가 없으면 그 역할을 이 후보에서 뺀다.
+        # 후보 1 이 사용자가 첫 번째로 적은 성분(희석제 mannitol 등)을 그대로 쓰도록 조합 전체를 버리지 않는다.
+        used: set[str] = set()
+        pick: dict = {}
+        for func, choices in zip(funcs, lists, strict=True):
+            chosen = next(
+                (choices[(index + shift) % len(choices)] for shift in range(len(choices))
+                 if choices[(index + shift) % len(choices)].casefold() not in used),
+                None,
+            )
+            if chosen is None:
+                continue
+            used.add(chosen.casefold())
+            pick[func] = chosen
+        if pick and pick not in combos:
             combos.append(pick)
     if len(combos) == k:
         return combos
