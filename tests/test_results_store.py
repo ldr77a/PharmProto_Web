@@ -132,6 +132,18 @@ def test_append_turns_updates_followup_and_html(tmp_path: Path) -> None:
     assert store.append_turns("20990101T000000Z-deadbeef", []) is False
 
 
+def test_results_saved_before_the_name_fix_keep_their_table(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    result_id = _save(store)
+    page_path = tmp_path / "results" / result_id / "result.html"
+    old_page = page_path.read_text(encoding="utf-8").replace("pharma:result", "phrama:result")   # 2026-10-05 이전 표지
+    page_path.write_text(old_page, encoding="utf-8")
+
+    assert store.load(result_id).html.endswith("<div class='card'>표</div>")
+    assert store.append_turns(result_id, [{"role": "user", "kind": "question", "text": "왜?"}]) is True
+    assert store.load(result_id).html.endswith("<div class='card'>표</div>")   # 덧붙여 써도 표가 사라지지 않는다
+
+
 @pytest.mark.parametrize(
     "bad",
     ["../x", "..\\x", "/etc/passwd", "20261004T120000Z-ZZZZZZZZ", "a" * 300,

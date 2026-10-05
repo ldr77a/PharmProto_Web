@@ -33,6 +33,7 @@
 
 - [ ] 사내 proxy와 인증서가 있는 망에서 첫 실행 다운로드 결과를 기록했다.
 - [ ] 인터넷이 끊긴 상태의 첫 실행은 `APP-START-001`과 bootstrap log 위치를 표시한다.
+- [ ] `release-data\knowledge.sqlite`를 망가뜨린 사본으로 실행하면 `DB-INTEGRITY-001`과 app log 위치를 표시한다.
 - [ ] 실행 후 공급자 연결을 끊으면 `LLM-UPSTREAM-001` 또는 `LLM-TIMEOUT-001`만 표시한다.
 - [ ] 잘못된 키는 `LLM-AUTH-001`, 제한 응답은 `LLM-RATE-001`로 표시한다.
 - [ ] `NO_PROXY=127.0.0.1,localhost` 환경에서도 health probe가 성공한다.
@@ -43,6 +44,7 @@
 - [ ] `%LOCALAPPDATA%\PharmaProto\logs\app.log`가 회전하며 질문, 응답, API 키가 없다.
 - [ ] `/api/diagnostics`에 app/snapshot/schema/provider 상태와 공개 오류 코드만 보인다.
 - [ ] 현재 폴더를 수정하지 않고 이전 검증 ZIP을 새 폴더에 풀어 롤백할 수 있다.
+- [ ] 0.1.x 로 저장한 작업이 있는 PC(`%LOCALAPPDATA%\PhramaProto\results`)에서 첫 실행 뒤 저장된 작업 목록에 그대로 보이고, 열면 조성표가 나온다.
 - [ ] 이전 ZIP과 새 ZIP을 각각 실행했을 때 각자의 Snapshot ID가 정확히 표시된다.
 
 ## 판정

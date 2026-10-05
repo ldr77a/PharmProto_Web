@@ -230,6 +230,20 @@ def test_launcher_main_redacts_runtime_shutdown_failure(monkeypatch, capsys):
     assert "private failure detail" not in captured.err
 
 
+def test_launcher_main_prints_the_specific_app_error_code(monkeypatch, capsys):
+    from pharma_proto.errors import DB_INTEGRITY_ERROR, AppError
+
+    monkeypatch.setattr(
+        "pharma_proto.launcher.launch",
+        lambda: (_ for _ in ()).throw(AppError(DB_INTEGRITY_ERROR)),
+    )
+
+    from pharma_proto.launcher import main
+
+    assert main() == 1
+    assert capsys.readouterr().err.strip() == DB_INTEGRITY_ERROR   # APP-START-001 로 뭉개지 않는다
+
+
 def test_only_the_exact_smoke_value_changes_normal_launcher_behavior(monkeypatch):
     calls = {}
 

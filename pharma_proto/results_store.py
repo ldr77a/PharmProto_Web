@@ -77,12 +77,19 @@ def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+_FRAGMENT_MARKERS = (
+    (RESULT_FRAGMENT_START, RESULT_FRAGMENT_END),
+    ("<!-- phrama:result -->", "<!-- /phrama:result -->"),   # 2026-10-05 이름 오타 수정 이전 저장본
+)
+
+
 def _fragment_of(page: str) -> str:
-    start = page.find(RESULT_FRAGMENT_START)
-    end = page.find(RESULT_FRAGMENT_END)
-    if start < 0 or end < 0 or end < start:
-        return ""
-    return page[start + len(RESULT_FRAGMENT_START):end]
+    for start_marker, end_marker in _FRAGMENT_MARKERS:
+        start = page.find(start_marker)
+        end = page.find(end_marker)
+        if 0 <= start < end:
+            return page[start + len(start_marker):end]
+    return ""
 
 
 def _default_opener(path: Path) -> None:

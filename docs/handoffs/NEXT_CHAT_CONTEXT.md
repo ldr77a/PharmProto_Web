@@ -6,10 +6,11 @@ DB 저장소(`../Pharma_Proto`)에서 작업하던 세션의 메모리는 폴더
 ## 1. 현재 상태
 
 - 앱 버전 **0.2.0**(`pharma_proto/__init__.py`, `pyproject.toml`, `uv.lock`). 폴더·데이터 경로 이름은 오타를 고친 `PharmaProto`
-  (`~/Library/Application Support/PharmaProto` 또는 `%LOCALAPPDATA%\PharmaProto`; 옛 `PhramaProto` 폴더는 첫 실행 때 한 번 옮긴다).
+  (`~/Library/Application Support/PharmaProto` 또는 `%LOCALAPPDATA%\PharmaProto`; 옛 `PhramaProto` 폴더의 `results`·`preferences.json`·`cache` 는 시작할 때마다 항목별로, 새 쪽에 없을 때만 옮긴다 —
+  bootstrap 이 앱보다 먼저 새 폴더를 만들기 때문. `runtime`·`tools` 는 옮기지 않고 새로 받는다. 옛 표지 `phrama:result` 저장본도 읽는다).
 - 브랜치 `feat/schema2-role-layer`, main 보다 27+ 커밋 앞. 피드백 9항목 대응 → 디자인 개편(연구 노트형) → 해설 분리(`/api/explain`) →
   schema 3(게이트1 저용량 오탐 수정) → 제외 성분·희석제 재배치 → 이름 오타 수정 → 0.2.0 버전 올림. 푸시·main 머지·태그는 사용자 결정.
-  원격은 `https://github.com/ldr77a/PhramaProto-0.1.git`(저장소 이름은 아직 옛 표기).
+  원격은 `https://github.com/ldr77a/PharmProto_Web.git`(옛 `PhramaProto-0.1` 주소는 여기로 넘어간다).
 - 스냅샷 `release-data/knowledge.sqlite` 는 **schema 3(20261005T070640Z)**, DB 저장소 `release-data/` 와 해시 동일, LFS 로 커밋됨.
   매니페스트 사본은 `docs/release/snapshot-20261005T070640Z-manifest.json`.
 - 테스트: macOS 에서는 `LOCALAPPDATA=/tmp/localappdata uv run pytest -q --deselect tests/product/test_launcher.py --deselect tests/product/test_release_baseline.py --deselect tests/product/test_release_zip.py --deselect tests/product/test_windows_standalone.py`

@@ -31,6 +31,7 @@ from pharma_proto.diagnostics import SafeDiagnostics, configure_safe_logging
 from pharma_proto.errors import (
     APP_START_ERROR,
     CONVERSATION_ERROR,
+    DB_INTEGRITY_ERROR,
     LLM_KEY_ERROR,
     LLM_RESPONSE_ERROR,
     PREFERENCES_IO_ERROR,
@@ -124,6 +125,37 @@ def _parse_body(model_type):
         raise AppError(REQUEST_ERROR, 400) from None
 
 
+_LEGACY_DATA_DIR = "PhramaProto"   # 2026-10-05 이전 오타 폴더명
+_LEGACY_DATA_ITEMS = ("results", "preferences.json", "cache")
+
+
+def _adopt_legacy_data(local_root: Path) -> None:
+    """옛 오타 폴더의 사용자 데이터(저장된 작업·화면 설정·SMILES 캐시)를 새 폴더로 옮긴다.
+
+    start.bat 의 bootstrap 이 앱보다 먼저 새 폴더(tools·logs·runtime)를 만들므로 폴더째가 아니라
+    항목별로, 새 쪽에 같은 이름이 없을 때만 옮긴다(시작할 때마다 다시 시도, 겹치면 새 쪽 유지).
+    실행 환경(runtime·tools)은 절대 경로가 박혀 있어 옮기지 않는다 — bootstrap 이 새로 만든다.
+    """
+    legacy_root = local_root.parent / _LEGACY_DATA_DIR
+    if not legacy_root.is_dir():
+        return
+    for name in _LEGACY_DATA_ITEMS:
+        source = legacy_root / name
+        target = local_root / name
+        try:
+            moves = (
+                [(child, target / child.name) for child in source.iterdir()]
+                if source.is_dir() and target.is_dir()
+                else [(source, target)]
+            )
+            for old, new in moves:
+                if old.exists() and not new.exists():
+                    new.parent.mkdir(parents=True, exist_ok=True)
+                    old.rename(new)
+        except OSError:
+            continue   # 잠긴 파일·권한 등 — 옛 위치에 그대로 두고 다음 시작 때 다시 시도한다(시작은 막지 않는다)
+
+
 def shutdown_app_resources(app: Flask) -> None:
     repository = app.extensions.get("knowledge_repository")
     if repository is not None:
@@ -153,17 +185,13 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
         raise TypeError("unsupported application override")
 
     local_root = Path(os.environ.get("LOCALAPPDATA", str(_ROOT / ".runtime"))) / "PharmaProto"
-    legacy_root = local_root.parent / "PhramaProto"   # 2026-10-05 이전 오타 폴더명: 있으면 한 번만 옮긴다
-    if legacy_root.is_dir() and not local_root.exists():
-        try:
-            legacy_root.rename(local_root)
-        except OSError:
-            pass
+    _adopt_legacy_data(local_root)
     diagnostics: SafeDiagnostics = configure_safe_logging(local_root / "logs")
     try:
         repository = SQLiteKnowledgeRepository.open(snapshot_path, manifest_path)
-    except Exception:
-        diagnostics.record(event="startup_error", code="DB-INTEGRITY-001")
+    except Exception as error:
+        code = error.code if isinstance(error, AppError) else DB_INTEGRITY_ERROR   # DB-VERSION-001 도 그대로
+        diagnostics.record(event="startup_error", code=code)
         diagnostics.close()
         raise
 

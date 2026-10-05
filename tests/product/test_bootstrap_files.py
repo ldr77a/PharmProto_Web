@@ -56,6 +56,26 @@ def test_start_bat_never_calls_system_python_or_pip():
     assert "py -" not in text
 
 
+def _batch_label_body(text: str, label: str) -> str:
+    start = text.index(f"\n:{label}\n")
+    end = text.find("\n:", start + 1)
+    return text[start:] if end < 0 else text[start:end]
+
+
+def test_start_bat_points_each_failure_at_the_log_that_explains_it():
+    text = (ROOT / "start.bat").read_text(encoding="utf-8").lower()
+    launcher = text.index("python -m pharma_proto.launcher")
+    launcher_failure = text[launcher:].split("goto :", 1)[1].split()[0]
+    bootstrap_failure = text[:launcher].rsplit("goto :", 1)[1].split()[0]
+
+    assert launcher_failure != bootstrap_failure
+    launcher_body = _batch_label_body(text, launcher_failure)
+    bootstrap_body = _batch_label_body(text, bootstrap_failure)
+    assert "app-start-001" in launcher_body and "logs\\app.log" in launcher_body
+    assert "bootstrap.log" not in launcher_body and "network" not in launcher_body
+    assert "app-start-001" in bootstrap_body and "logs\\bootstrap.log" in bootstrap_body
+
+
 def test_bootstrap_pins_tool_and_python_and_verifies_sha256():
     text = (ROOT / "tools" / "bootstrap-runtime.ps1").read_text(encoding="utf-8")
     assert 'UvVersion = "0.12.0"' in text

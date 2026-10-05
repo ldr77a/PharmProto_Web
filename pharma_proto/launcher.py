@@ -114,7 +114,10 @@ def launch(app: Any | None = None) -> int:
 def main() -> int:
     try:
         return launch()
-    except (AppError, RuntimeError):
+    except AppError as error:
+        print(error.code, file=os.sys.stderr)   # DB-INTEGRITY-001 · DB-VERSION-001 · APP-ALREADY-RUNNING-001 그대로
+        return 1
+    except RuntimeError:
         print(APP_START_ERROR, file=os.sys.stderr)
         return 1
 
