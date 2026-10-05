@@ -42,7 +42,11 @@ EXPLAIN_INSTRUCTION = (
     "5. 후보마다: summary(한 문단), ingredient_notes(성분별 선택 이유와 주의, API 포함), risks(호환성·안정성·공정 위험), "
     "process_notes(요청 공정 기준의 메모), verification_checklist(실험으로 확인할 항목), alternatives(대안과 이유).\n"
     "6. api_profile 에는 API 의 물성·작용기·제제 설계 시 주의점을 적되 전부 basis='general' 로 표시한다.\n"
-    "7. disclaimer 에 이 해설의 한계를 한 문장으로 적는다."
+    "7. disclaimer 에 이 해설의 한계를 한 문장으로 적는다.\n"
+    "8. 분량 제한(응답 시간): summary 는 세 문장 이내, ingredient_notes 는 성분당 한두 문장, "
+    "risks·process_notes·verification_checklist·alternatives 는 각 3개 이하. "
+    "후보 1 만 전체 항목을 쓰고, 후보 2 이후는 summary(후보 1 과의 차이)와 alternatives 만 쓰며 "
+    "ingredient_notes 는 후보 1 에 없는 성분만 적는다."
 )
 
 FOLLOWUP_INSTRUCTION = (
@@ -253,6 +257,7 @@ class LLMService:
         gemini_schema: dict[str, Any],
         max_tokens: int,
         timeout: float,
+        effort: str | None = None,   # Claude 전용(output_config.effort). 근거 정리처럼 가벼운 작업은 "low"
     ):
         """세 공급자의 구조화 출력 호출 하나. 응답은 output_model 인스턴스.
 
@@ -278,6 +283,7 @@ class LLMService:
                     system=system,
                     messages=[{"role": "user", "content": user_text}],
                     output_format=output_model,
+                    **({"output_config": {"effort": effort}} if effort else {}),
                 )
                 if getattr(response, "stop_reason", None) == "refusal":
                     raise ValueError("Claude declined the request")
@@ -331,6 +337,7 @@ class LLMService:
             system=EXPLAIN_INSTRUCTION, user_text=user_text, output_model=FormulationExplanation,
             gemini_schema=_gemini_explanation_schema(), max_tokens=16000,
             timeout=self._explain_policy.timeout_seconds,
+            effort="low",   # 실측: high 91s(출력 14k 토큰) → low 41s. 분량 제한과 합쳐 20~30s 목표
         )
 
     def _followup_once(

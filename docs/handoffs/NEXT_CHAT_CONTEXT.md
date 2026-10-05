@@ -86,3 +86,10 @@ DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더
 ## 7. 새 세션 첫 명령 예시
 
 "docs/handoffs/NEXT_CHAT_CONTEXT.md 와 CLAUDE.md 를 읽고, 실제 Claude 키로 §6 시나리오 1·2 를 돌려 본 뒤 문제를 고쳐."
+
+## 해설 속도 (2026-10-05 추가)
+
+해설은 생성 결과를 입력으로 쓰므로 두 번째 LLM 호출을 없앨 수는 없다. 대신 가볍게 만들었다(실측, 트리메타지딘 3후보, Claude Sonnet 5.5):
+- effort high · 전체 해설: 91s, 출력 14k 토큰 → effort low · 분량 제한 · 후보 2 이후는 차이점만: 26~27s.
+- 적용 위치: `llm/service.py` `_structured_call(effort=...)`(Claude 만 output_config.effort), `EXPLAIN_INSTRUCTION` 8번 규칙.
+- 더 줄이려면: 해설을 `/api/generate` 에서 떼어 표를 먼저 보여 주고(파싱+생성 3~5초) 후보별 `/api/explain` 을 뒤에 호출(후보 1 자동, 나머지는 버튼). 후보 하나만 간결하게 쓰면 16s. 저장본(`/api/results`)과 후속 질문의 재해설도 같은 경로로 바꿔야 한다.
