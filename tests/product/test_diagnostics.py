@@ -47,7 +47,7 @@ def test_diagnostics_summary_exposes_versions_counts_and_recent_codes(tmp_path):
     )
 
     assert summary == {
-        "app_version": "0.1.0",
+        "app_version": "0.2.0",
         "database": {
             "status": "ok",
             "snapshot_id": "snapshot-1",

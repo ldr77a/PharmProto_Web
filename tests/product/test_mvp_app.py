@@ -59,7 +59,7 @@ def test_app_health_and_diagnostics_expose_only_safe_status(tmp_path, monkeypatc
     assert health.status_code == 200
     assert health.get_json() == {
         "status": "ok",
-        "app_version": "0.1.0",
+        "app_version": "0.2.0",
         "snapshot_id": "fixture-snapshot",
         "schema_version": 3,
         "node_count": 2,

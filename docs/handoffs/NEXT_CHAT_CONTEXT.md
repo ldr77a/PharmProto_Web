@@ -1,23 +1,30 @@
-# 다음 세션 인수인계 (2026-10-04 밤, 피드백 9항목 대응 뒤 기준)
+# 다음 세션 인수인계 (2026-10-05 저녁, 0.2.0 릴리스 준비 기준)
 
 이 파일은 앱 저장소(PharmaProto-0.1)에서 새 Claude Code 세션을 열 때 첫 명령으로 읽히는 용도다.
 DB 저장소(`../Pharma_Proto`)에서 작업하던 세션의 메모리는 폴더에 묶여 있어 여기서는 보이지 않는다. 필요한 맥락을 전부 적는다.
 
 ## 1. 현재 상태
 
-- 브랜치 `feat/schema2-role-layer` (main 에서 분기). 커밋 순서: `abe6336`(schema 2 역할층·스냅샷 20261004T120041Z) →
-  해설층 → 인수인계 → `0676d09` 라이트 테마 → `b010023` 공통 기반 → `eb5ab63` 3번 분량 반영 → `b7b163a` 1·7번 후속 질문·로그아웃 →
-  `e2a98e4` 4·5번 테마·인쇄 → `bd56423` 9번 저장 → `f215e85` 6·8번 설명 → (이 문서 커밋). 푸시 안 함, main 머지 여부는 사용자 결정.
-- 스냅샷 `release-data/knowledge.sqlite` 는 schema 2(20261004T120041Z), LFS 포인터로 커밋됨.
+- 앱 버전 **0.2.0**(`pharma_proto/__init__.py`, `pyproject.toml`, `uv.lock`). 폴더·데이터 경로 이름은 오타를 고친 `PharmaProto`
+  (`~/Library/Application Support/PharmaProto` 또는 `%LOCALAPPDATA%\PharmaProto`; 옛 `PhramaProto` 폴더는 첫 실행 때 한 번 옮긴다).
+- 브랜치 `feat/schema2-role-layer`, main 보다 27+ 커밋 앞. 피드백 9항목 대응 → 디자인 개편(연구 노트형) → 해설 분리(`/api/explain`) →
+  schema 3(게이트1 저용량 오탐 수정) → 제외 성분·희석제 재배치 → 이름 오타 수정 → 0.2.0 버전 올림. 푸시·main 머지·태그는 사용자 결정.
+  원격은 `https://github.com/ldr77a/PhramaProto-0.1.git`(저장소 이름은 아직 옛 표기).
+- 스냅샷 `release-data/knowledge.sqlite` 는 **schema 3(20261005T070640Z)**, DB 저장소 `release-data/` 와 해시 동일, LFS 로 커밋됨.
+  매니페스트 사본은 `docs/release/snapshot-20261005T070640Z-manifest.json`.
 - 테스트: macOS 에서는 `LOCALAPPDATA=/tmp/localappdata uv run pytest -q --deselect tests/product/test_launcher.py --deselect tests/product/test_release_baseline.py --deselect tests/product/test_release_zip.py --deselect tests/product/test_windows_standalone.py`
-  → **103 passed, 2 skipped**. 제외한 32개는 msvcrt·powershell 이 필요한 Windows 전용. JS 는 `node --test tests/test_app_js.mjs` → **7 passed**.
-- 린트 `uv run ruff check .` 는 기존 코드의 경고가 남아 있다. 이번에 손댄 파일은 모두 통과. 새로 손댄 파일만 깨끗하게 유지한다.
-- 개발용 실행(macOS): `LOCALAPPDATA=/tmp/localappdata uv run python -c "from pharma_proto.app import create_app; create_app().run(host='127.0.0.1', port=8765)"`.
-  **주의**: 8765 를 이전 세션의 서버가 잡고 있을 수 있다(`lsof -nP -iTCP:8765 -sTCP:LISTEN`). 그 서버는 구 스냅샷(schema 1)이고 새 라우트가 없다.
-- 정식 실행은 Windows `start.bat`. **릴리스 ZIP 은 아직 다시 만들지 않았다** — 새 모듈 5개가 허용목록에 들어갔으니 Windows 에서
-  `pwsh tools/build-release.ps1` 후 `docs/release/WINDOWS_SMOKE_CHECKLIST.md` 로 확인해야 한다.
+  → **144 passed, 2 skipped**. 제외한 32개는 msvcrt·powershell 이 필요한 Windows 전용. JS 는 `node --test tests/test_app_js.mjs` → **11 passed**.
+- 린트 `uv run ruff check .` 는 예전 코드의 스타일 경고 28건이 남아 있다(동작 무관). 새로 손댄 파일만 깨끗하게 유지한다.
+- 릴리스 허용목록(`tools/build-release.ps1 $runtimePackageFiles`) 감사: 목록 54개 모두 존재, 앱이 import 하는 저장소 모듈 41개와 글꼴·svg 전부 포함(2026-10-05 확인).
+  ZIP 에는 허용목록 + `start.bat`·`pyproject.toml`·`uv.lock`·`function_seed.json`·`README-RESEARCHER.md` + `tools/bootstrap-runtime.ps1`·`uv-windows-x64.sha256` + `release-data/` 만 들어간다.
+  `docs/`, `tests/`, `CLAUDE.md`, 사용자 매뉴얼은 들어가지 않는다.
+- 개발용 실행(macOS): `LOCALAPPDATA="$HOME/Library/Application Support" uv run python -c "from waitress import serve; from pharma_proto.app import create_app; serve(create_app(), host='127.0.0.1', port=8765, threads=4)"`.
+  템플릿은 서버가 처음 한 번만 읽으므로 `index.html` 을 바꾸면 재시작해야 한다(정적 JS·CSS 는 바로 반영). 재시작하면 메모리의 키가 사라진다.
+- 정식 실행은 Windows `start.bat`. **0.2.0 릴리스 ZIP 은 아직 만들지 않았다.** 빌드 스크립트는 `.venv\Scripts\python.exe` 와 PowerShell 전용 cmdlet 을 쓰므로 Windows 에서만 돈다:
+  `pwsh tools/build-release.ps1` → `dist/PharmaProto-0.2.0-20261005T070640Z.zip`, 이어서 `check-release-tree.ps1`, 제외했던 Windows 테스트 32개, `docs/release/WINDOWS_SMOKE_CHECKLIST.md`.
 - LLM 키는 화면의 "API 설정"에 넣는다(메모리에만, 로그아웃이 지움). 개발 중 Claude 키는 `../Pharma_Proto/.env` 의 `CLAUDE_API_KEY` 에 있다. 채팅에 붙이지 말 것.
-- **실제 LLM 으로 끝까지 돌려 본 적은 없다**(가짜 서비스 테스트만). 다음 세션 첫 작업으로 Claude 키를 넣고 §6 의 수동 시나리오를 돌려 보기를 권한다.
+- 실제 LLM 검증: Claude 로 생성·해설은 여러 번 성공(진단 로그 `generation_complete`·`explanation_complete`, 해설 속도 실측은 아래 절).
+  **후속 질문·저장·이어서 질문은 실제 키로 돌린 기록이 없고, Gemini·OpenAI 는 실제 호출 기록이 전혀 없다.**
 
 ## 2. 절대 규칙 (CLAUDE.md 와 동일, 다시 강조)
 
@@ -54,8 +61,8 @@ DB 저장소(`../Pharma_Proto`)에서 작업하던 세션의 메모리는 폴더
 
 ## 4. 남은 일 (우선순위 순)
 
-1. **실제 LLM 으로 끝까지 검증**(§6). 특히 Gemini 의 `amounts`·`FollowUpResponse` 스키마(포터블 dict)와 Claude `messages.parse` 의 `FollowUpResponse`(중첩 `ParsedRequest`)가 실제로 통하는지. 실패하면 `LLM-RESPONSE-001` 과 로그의 `provider_reason` 을 본다.
-2. **Windows 릴리스 ZIP 재생성 + 스모크**(`tools/build-release.ps1`, `check-release-tree.ps1`). 새 모듈: `conversation.py`, `preferences.py`, `results_store.py`, `generation/help_text.py`(+ 누락됐던 2개).
+1. **0.2.0 릴리스 마무리(Windows)**: `pwsh tools/build-release.ps1` → ZIP, `check-release-tree.ps1`, Windows 전용 테스트 32개, 스모크 체크리스트. 끝나면 `docs/release/` 에 빌드가 만든 릴리스 매니페스트를 커밋하고 태그 `v0.2.0`.
+2. **후속 질문·저장·이어서 질문을 실제 Claude 키로 한 번**(§6 의 2·4). Gemini 를 쓸 연구자가 있으면 Gemini 로 생성 1회 — `amounts`·`excluded`·`FollowUpResponse` 포터블 스키마가 실제로 통하는지. 실패하면 `LLM-RESPONSE-001` 과 로그의 `provider_reason` 을 본다.
 3. 8(a) 공정 규칙 `generation/process_rules.json` — DB 변경 없이 가능. 설계는 design 문서.
 4. 2번 액제 지원 — DB 쪽 역할 사전·범위 표본이 먼저.
 5. 선택: 자동 저장 옵션(지금은 수동), 저장 목록 검색, 결과 비교 화면.

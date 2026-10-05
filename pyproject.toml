@@ -1,6 +1,6 @@
 [project]
 name = "pharma-proto"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.12.13,<3.13"
 dependencies = [
   "Flask",

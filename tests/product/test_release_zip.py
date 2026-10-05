@@ -58,7 +58,7 @@ def test_release_zip_contains_only_runtime_allowlist(tmp_path):
 
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     archive = _built_zip(output)
-    assert archive.name == "PharmaProto-0.1.0-fixture-snapshot.zip"
+    assert archive.name == "PharmaProto-0.2.0-fixture-snapshot.zip"
     with zipfile.ZipFile(archive) as bundle:
         names = {name.replace("\\", "/") for name in bundle.namelist()}
         required = {
@@ -152,8 +152,8 @@ def test_release_builder_preserves_previous_versioned_zip(tmp_path):
     assert first.returncode == 0, f"{first.stdout}\n{first.stderr}"
     assert second.returncode == 0, f"{second.stdout}\n{second.stderr}"
     assert {path.name for path in output.glob("*.zip")} == {
-        "PharmaProto-0.1.0-snapshot-a.zip",
-        "PharmaProto-0.1.0-snapshot-b.zip",
+        "PharmaProto-0.2.0-snapshot-a.zip",
+        "PharmaProto-0.2.0-snapshot-b.zip",
     }
 
 
