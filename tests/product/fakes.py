@@ -18,7 +18,9 @@ class FakeKnowledge:
         role_candidates: Mapping[str, list[str]] | None = None,
         role_ranges: Mapping[tuple[str, str], RangeStats] | None = None,
         role_sum_ranges: Mapping[str, RangeStats] | None = None,
+        filler_ranges: Mapping[tuple[str, str], RangeStats] | None = None,
     ) -> None:
+        self._filler_ranges = dict({} if filler_ranges is None else filler_ranges)
         self._primary_roles = dict({} if primary_roles is None else primary_roles)
         self._role_candidates = dict({} if role_candidates is None else role_candidates)
         self._role_ranges = dict({} if role_ranges is None else role_ranges)
@@ -68,6 +70,9 @@ class FakeKnowledge:
 
     def role_pct_sum_range(self, role: str) -> RangeStats:
         return self._role_sum_ranges.get(role, RangeStats(n=0))
+
+    def filler_pct_range(self, ingredient: str, api_load_band: str) -> RangeStats:
+        return self._filler_ranges.get((ingredient, api_load_band), self._filler_ranges.get(("*", api_load_band), RangeStats(n=0)))
 
     def compatibility_usage(self, api: str, excipient: str) -> UsageEvidence:
         return self._usage.get(

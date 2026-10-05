@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from cleaning.canonical_base import classify_base
-from pharma_proto.knowledge.contracts import RangeStats, UsageEvidence
+from pharma_proto.knowledge.contracts import FILLER_ANY_INGREDIENT, RangeStats, UsageEvidence
 from pharma_proto.knowledge.evidence import (
     FunctionDescriptor,
     IncompatibilityEvidence,
@@ -151,6 +151,19 @@ class SQLiteKnowledgeRepository:
             (role,),
         ).fetchone()
         return _range_from_row(row) if row else RangeStats(n=0)
+
+    def filler_pct_range(self, ingredient: str, api_load_band: str) -> RangeStats:
+        specific = self._connection.execute(
+            "SELECT * FROM lookup_filler_pct_ranges WHERE api_load_band = ? AND ingredient_key = ?",
+            (api_load_band, _ingredient_key(ingredient)),
+        ).fetchone()
+        if specific is not None and int(specific["n"]) >= 5:
+            return _range_from_row(specific)
+        generic = self._connection.execute(
+            "SELECT * FROM lookup_filler_pct_ranges WHERE api_load_band = ? AND ingredient_key = ?",
+            (api_load_band, FILLER_ANY_INGREDIENT),
+        ).fetchone()
+        return _range_from_row(generic) if generic else RangeStats(n=0)
 
     def compatibility_usage(self, api: str, excipient: str) -> UsageEvidence:
         parameters = (api.lower(), excipient.lower())

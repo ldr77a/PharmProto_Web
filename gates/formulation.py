@@ -17,6 +17,7 @@ class Component:
     pct: float | None = None
     function: str | None = None      # 명시 시 우선(없으면 KG/사전으로 해석)
     process_material: bool = False   # water/acetone 등 공정용매(범위·총합서 제외)
+    filler: bool = False             # 잔여 채움(q.s.) 희석제: % 가 100−API−나머지로 정해지는 값(게이트1 은 API 함량 구간으로 심사)
 
 
 @dataclass

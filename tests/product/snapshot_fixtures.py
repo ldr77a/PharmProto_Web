@@ -12,7 +12,7 @@ def write_test_snapshot(
     root: Path,
     *,
     snapshot_id: str = "fixture-snapshot",
-    schema_version: int = 2,
+    schema_version: int = 3,
 ) -> tuple[Path, Path]:
     root.mkdir(parents=True, exist_ok=True)
     database = root / "knowledge.sqlite"
@@ -107,6 +107,15 @@ def write_test_snapshot(
         "INSERT INTO lookup_role_pct_sums "
         "(role, n, lo, hi, mean, p5, p95, median) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         ("binder", 5, 1.0, 10.0, 4.0, 1.5, 9.0, 4.0),
+    )
+    connection.executemany(
+        "INSERT INTO lookup_filler_pct_ranges "
+        "(api_load_band, ingredient_key, n, lo, hi, mean, p5, p95, median) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            ("le5", "*", 10, 60.0, 97.0, 85.0, 62.0, 96.7, 88.0),
+            ("le5", "example excipient", 6, 70.0, 95.0, 86.0, 72.0, 94.0, 87.0),
+            ("le5", "rare filler", 2, 80.0, 90.0, 85.0, 80.0, 90.0, 85.0),
+        ),
     )
     connection.execute(
         "INSERT INTO lookup_compatibility "

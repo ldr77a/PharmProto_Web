@@ -19,7 +19,7 @@ from pharma_proto.errors import (
     AppError,
 )
 
-SCHEMA_VERSION = 2  # 2: 역할층 표(lookup_role_*) 추가
+SCHEMA_VERSION = 3  # 2: 역할층 표(lookup_role_*), 3: API 함량 구간별 희석제 범위(lookup_filler_pct_ranges)
 SUPPORTED_SCHEMA_VERSIONS = frozenset({SCHEMA_VERSION})
 
 SCHEMA_SQL = """
@@ -207,6 +207,19 @@ CREATE TABLE lookup_role_pct_sums (
     p5 REAL,
     p95 REAL,
     median REAL
+) STRICT;
+
+CREATE TABLE lookup_filler_pct_ranges (
+    api_load_band TEXT NOT NULL,
+    ingredient_key TEXT NOT NULL,
+    n INTEGER NOT NULL,
+    lo REAL,
+    hi REAL,
+    mean REAL,
+    p5 REAL,
+    p95 REAL,
+    median REAL,
+    PRIMARY KEY(api_load_band, ingredient_key)
 ) STRICT;
 
 CREATE INDEX idx_candidates_lookup

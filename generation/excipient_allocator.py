@@ -221,5 +221,6 @@ def allocate(
             comps.append(Component(d.name, role="api", mg=d.mg,
                                    pct=round(d.mg / total * 100, 3), function="api"))
     for a in allocs:
-        comps.append(Component(a.name, role="excipient", pct=a.pct, mg=a.mg, function=a.function))
+        comps.append(Component(a.name, role="excipient", pct=a.pct, mg=a.mg, function=a.function,
+                               filler=a.source == "filler(q.s.)"))
     return comps, allocs, total, warnings
