@@ -38,6 +38,14 @@ const closePanelButton = document.querySelector("#close-panel");
 const examples = document.querySelector("#examples");
 const resultsSkeleton = document.querySelector("#results-skeleton");
 const resultsEmpty = document.querySelector("#results-empty");
+const resumeKey = document.querySelector("#resume-key");
+const continueKeyButton = document.querySelector("#continue-key");
+// 서버 메모리에 키가 남아 있는 공급자(/health 의 providers). 새로고침해도 키를 다시 넣지 않게 안내한다.
+let configuredProviders = {};
+
+function updateResumeKey() {
+  resumeKey.hidden = !configuredProviders[provider.value];
+}
 // 서버 메모리에 있는 현재 대화의 id. 새로고침·로그아웃이면 사라진다(브라우저에 저장하지 않음).
 let conversationId = null;
 
@@ -140,6 +148,7 @@ function showApiSetup() {
   resultsEmpty.hidden = false;
   setupMessage.textContent = "";
   apiKey.focus();
+  refreshHealth();   // 로그아웃 뒤에는 '저장된 키로 계속' 안내가 사라져야 한다
 }
 
 function appendFollowupLog(htmlText) {
@@ -221,9 +230,22 @@ async function refreshHealth() {
     const data = await jsonRequest("/health");
     document.querySelector("#health").textContent =
       `${data.status} · 앱 ${data.app_version} · DB ${data.snapshot_id} / schema ${data.schema_version}`;
+    configuredProviders = data.providers || {};
+    // 고른 모델에는 키가 없는데 다른 모델에 키가 남아 있으면 그 모델을 먼저 보여 준다.
+    if (!configuredProviders[provider.value]) {
+      const kept = Object.keys(configuredProviders).find(
+        (name) => configuredProviders[name] && modelCatalog[name],
+      );
+      if (kept) {
+        provider.value = kept;
+        populateModels();
+      }
+    }
   } catch (error) {
     document.querySelector("#health").textContent = describeError(error);
+    configuredProviders = {};
   }
+  updateResumeKey();
 }
 
 document.querySelector("#save-key").addEventListener("click", async () => {
@@ -281,7 +303,15 @@ logoutButton.addEventListener("click", async () => {
   }
   showApiSetup();
 });
-provider.addEventListener("change", populateModels);
+provider.addEventListener("change", () => {
+  populateModels();
+  updateResumeKey();
+});
+continueKeyButton.addEventListener("click", () => {
+  if (!configuredProviders[provider.value]) return;
+  populateModels();
+  showResearchApp();   // 키는 서버에 그대로 있으므로 다시 보내지 않는다
+});
 tier.addEventListener("change", () => {
   selectedModel.textContent = modelCatalog[provider.value][tier.value];
 });

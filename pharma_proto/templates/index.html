@@ -32,6 +32,10 @@
             {% endfor %}
           </select>
         </label>
+        <div id="resume-key" class="resume-key" hidden>
+          <p class="notice">이 모델의 API 키가 아직 프로그램 메모리에 남아 있습니다. 로그아웃하거나 프로그램을 끄기 전까지 유지됩니다.</p>
+          <button id="continue-key" class="ghost" type="button">저장된 키로 계속</button>
+        </div>
         <p id="api-cost-notice" class="notice cost-notice">외부 AI API 호출은 과금 대상입니다.</p>
         <label>이번 실행의 API 키
         <input id="api-key" type="password" autocomplete="off" spellcheck="false">

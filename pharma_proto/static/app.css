@@ -140,6 +140,9 @@ button[aria-busy="true"] { cursor: progress; }
 .setup-fields { display: grid; gap: 16px; margin-top: 24px; }
 .setup-fields .cost-notice { margin: 0; padding: 9px 12px; border-left: 3px solid var(--warn); border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--warn); font-weight: 600; }
 .setup-fields .key-notice { margin: -6px 0 0; }
+.resume-key { display: grid; gap: 8px; padding: 10px 12px; border-left: 3px solid var(--evidence); border-radius: var(--radius-sm); background: var(--evidence-soft); }
+.resume-key .notice { margin: 0; color: var(--evidence); font-weight: 600; }
+.resume-key button { justify-self: start; }
 .setup-fields #save-key { justify-self: start; min-width: 140px; }
 .message { min-height: 22px; margin: 4px 0 0; color: var(--warn); font-weight: 600; font-size: 14px; }
 .message:empty { display: none; }

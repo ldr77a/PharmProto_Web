@@ -99,6 +99,8 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
     "#examples": fakeElement(),
     "#results-skeleton": fakeElement({hidden: true}),
     "#results-empty": fakeElement(),
+    "#resume-key": fakeElement({hidden: true}),
+    "#continue-key": fakeElement(),
     "#followup-question": fakeElement(),
     "#followup-log": fakeElement(),
     "#followup": fakeElement(),
@@ -450,4 +452,30 @@ test("옆 패널은 게이트 안내·저장된 작업을 번갈아 열고, 예�
   assert.equal(el["#results-skeleton"].hidden, true);     // 끝나면 자리 표시는 사라지고
   assert.equal(el["#results-empty"].hidden, true);        // 결과가 있으니 시작 안내도 숨는다
   assert.equal(el["#result-actions"].hidden, false);
+});
+
+test("서버에 키가 남아 있으면 '저장된 키로 계속' 안내가 보이고, 누르면 키를 다시 보내지 않고 연구 화면이 열린다", async () => {
+  const health = {status: "ok", app_version: "0.1.0", snapshot_id: "test", schema_version: 2,
+                  providers: {openai: true, gemini: false, claude: false}};
+  const harness = browserHarness({routes: {"GET /health": health}});
+  await new Promise((resolve) => setImmediate(resolve));           // 첫 /health 응답 처리까지
+
+  assert.equal(harness.elements["#resume-key"].hidden, false);
+
+  await harness.elements["#continue-key"].dispatch("click");
+
+  assert.equal(harness.elements["#api-setup"].hidden, true);
+  assert.equal(harness.elements["#research-app"].hidden, false);
+  assert.ok(!harness.fetchCalls.some(([url, options]) => url === "/api/key" && options.method === "POST"));
+
+  await harness.elements["#logout"].dispatch("click");             // 로그아웃 뒤 /health 는 키 없음
+  health.providers = {openai: false, gemini: false, claude: false};
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.elements["#resume-key"].hidden, true);
+});
+
+test("키가 없는 서버에서는 '저장된 키로 계속' 안내가 숨어 있다", async () => {
+  const harness = browserHarness();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.elements["#resume-key"].hidden, true);
 });

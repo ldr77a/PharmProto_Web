@@ -241,6 +241,7 @@ def test_first_load_only_exposes_api_setup(app_factory) -> None:
     assert "hidden" in probe.attrs("followup-panel")
     assert probe.text("api-cost-notice") == "외부 AI API 호출은 과금 대상입니다."
     assert "파일에 저장하지 않습니다" in probe.text("key-notice")
+    assert "hidden" in probe.attrs("resume-key") and probe.text("continue-key") == "저장된 키로 계속"
     assert "연구 검토용 시제품입니다." not in probe.text("api-setup")
     assert "로그아웃 (API 키 삭제)" in probe.text("research-app")
     assert "API 설정 변경" not in probe.text("research-app")
