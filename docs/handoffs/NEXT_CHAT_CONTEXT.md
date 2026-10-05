@@ -101,3 +101,10 @@ DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더
 - 사용자가 '코팅: HPMC, PEG6000, 탈크, 색소' 처럼 코팅 시스템을 통째로 적으면 역할 사전(없으면 이름 규칙)으로 가소제·활택보조·착색제 자리로 가르고 코팅 자리엔 피막 형성제만 남긴다(`candidate_selector._split_coating_system`, `coating_system_role`).
 - `_distinct_picks`: 같은 성분이 두 역할에 걸리면(활택제 talc·활택보조 talc) 조합을 통째로 버리지 않고 그 역할만 다음 선택지로 넘기거나 뺀다. 후보 1 이 사용자가 첫 번째로 적은 성분을 그대로 쓴다.
 - 검증 사례: NDMA 질문(트리메타지딘 20 mg, 95 mg, 직타/건식과립, MCC PH102). 후보 1 = MCC 결합제·talc 활택제·HPMC 코팅·PEG 가소제·색소·CCS·mannitol q.s. 해설은 2차 아민과 아질산염 불순물에 의한 니트로소아민 위험을 '일반 지식'으로 언급한다.
+
+## 게이트1 저용량 오탐 수정 — schema 3 (2026-10-05 추가)
+
+- 증상: 암로디핀 5 mg/100 mg 직타정에서 MCC 86% 가 "범위 벗어남(p95=62.89%)" 하드 실패. 원인은 잔여 채움 희석제의 % 가 100−API−나머지로 결정되는 값인데 모든 API 함량을 합친 성분 범위로 심사한 것. 같은 DB 에서 API ≤5% 구간만 보면 MCC p95 96.5%, 최대 희석제 p95 96.5%.
+- DB 저장소: export 때 역할 추정으로 배합별 '가장 큰 희석제 %' 를 API 함량 구간(le5·5_10·10_25·25_50·gt50, `contracts.api_load_band`)별로 집계한 `lookup_filler_pct_ranges`(성분별 행은 표본 5 이상, 전체는 `*`). 계약 메서드 `filler_pct_range(ingredient, band)`. `SUPPORTED_SCHEMA_VERSIONS={3}`, 스냅샷 `20261005T070640Z`.
+- 앱: `Component.filler`(allocator 가 q.s. 희석제에 표시) → `gates/allowable_range.py` 가 filler 만 구간 분포로 심사, 표본 없으면 전체 범위. 표기 "KG 잔여채움·API ≤5%[p5~p95=…]".
+- 계약 파일 3개(contracts·snapshot·sqlite_repository)는 publish 로 복사된 것. 앱에서 고치지 말 것.
