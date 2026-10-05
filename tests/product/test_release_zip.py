@@ -45,7 +45,7 @@ def _run_builder(
 
 
 def _built_zip(output: Path) -> Path:
-    archives = sorted(output.glob("PhramaProto-*.zip"))
+    archives = sorted(output.glob("PharmaProto-*.zip"))
     assert len(archives) == 1
     return archives[0]
 
@@ -58,7 +58,7 @@ def test_release_zip_contains_only_runtime_allowlist(tmp_path):
 
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     archive = _built_zip(output)
-    assert archive.name == "PhramaProto-0.1.0-fixture-snapshot.zip"
+    assert archive.name == "PharmaProto-0.1.0-fixture-snapshot.zip"
     with zipfile.ZipFile(archive) as bundle:
         names = {name.replace("\\", "/") for name in bundle.namelist()}
         required = {
@@ -152,8 +152,8 @@ def test_release_builder_preserves_previous_versioned_zip(tmp_path):
     assert first.returncode == 0, f"{first.stdout}\n{first.stderr}"
     assert second.returncode == 0, f"{second.stdout}\n{second.stderr}"
     assert {path.name for path in output.glob("*.zip")} == {
-        "PhramaProto-0.1.0-snapshot-a.zip",
-        "PhramaProto-0.1.0-snapshot-b.zip",
+        "PharmaProto-0.1.0-snapshot-a.zip",
+        "PharmaProto-0.1.0-snapshot-b.zip",
     }
 
 
@@ -208,8 +208,8 @@ def test_extracted_release_starts_loopback_health_and_exits(tmp_path):
     environment.update(
         {
             "LOCALAPPDATA": str(tmp_path / "Local App Data"),
-            "PHRAMA_SMOKE_EXIT_AFTER_START": "1",
-            "PHRAMA_NONINTERACTIVE": "1",
+            "PHARMA_SMOKE_EXIT_AFTER_START": "1",
+            "PHARMA_NONINTERACTIVE": "1",
             "NO_PROXY": "127.0.0.1,localhost",
             "no_proxy": "127.0.0.1,localhost",
         }

@@ -78,7 +78,7 @@ def launch(app: Any | None = None) -> int:
         local = os.environ.get("LOCALAPPDATA")
         if not local:
             raise AppError(APP_START_ERROR)
-        lock_path = os.path.join(local, "PhramaProto", "runtime", "instance.lock")
+        lock_path = os.path.join(local, "PharmaProto", "runtime", "instance.lock")
         try:
             lock = InstanceLock.acquire(lock_path)
         except InstanceAlreadyRunning:
@@ -98,7 +98,7 @@ def launch(app: Any | None = None) -> int:
         server = create_server(application, host=_HOST, port=0)
         if lock is not None:
             lock.write_state(pid=os.getpid(), port=server.effective_port)
-        if os.environ.get("PHRAMA_SMOKE_EXIT_AFTER_START") == _SMOKE_ENVIRONMENT_VALUE:
+        if os.environ.get("PHARMA_SMOKE_EXIT_AFTER_START") == _SMOKE_ENVIRONMENT_VALUE:
             return _run_smoke_server(server)
 
         webbrowser.open(f"http://{_HOST}:{server.effective_port}/")

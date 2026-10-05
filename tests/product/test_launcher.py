@@ -12,7 +12,7 @@ def test_launcher_binds_loopback_and_opens_effective_port(monkeypatch):
         def run(self):
             calls["ran"] = True
 
-    monkeypatch.delenv("PHRAMA_SMOKE_EXIT_AFTER_START", raising=False)
+    monkeypatch.delenv("PHARMA_SMOKE_EXIT_AFTER_START", raising=False)
     monkeypatch.setattr(
         "pharma_proto.launcher.create_server",
         lambda app, host, port: calls.update(host=host, port=port) or FakeServer(),
@@ -57,7 +57,7 @@ def test_launcher_smoke_hook_probes_health_closes_server_and_returns_zero(monkey
         def read(self):
             return b'{"status":"ok"}'
 
-    monkeypatch.setenv("PHRAMA_SMOKE_EXIT_AFTER_START", "1")
+    monkeypatch.setenv("PHARMA_SMOKE_EXIT_AFTER_START", "1")
     monkeypatch.setattr(
         "pharma_proto.launcher.create_server",
         lambda app, host, port: calls.update(host=host, port=port) or FakeServer(),
@@ -239,7 +239,7 @@ def test_only_the_exact_smoke_value_changes_normal_launcher_behavior(monkeypatch
         def run(self):
             calls["ran"] = True
 
-    monkeypatch.setenv("PHRAMA_SMOKE_EXIT_AFTER_START", "true")
+    monkeypatch.setenv("PHARMA_SMOKE_EXIT_AFTER_START", "true")
     monkeypatch.setattr(
         "pharma_proto.launcher.create_server",
         lambda app, host, port: calls.update(host=host, port=port) or FakeServer(),
@@ -308,7 +308,7 @@ def test_launcher_releases_resources_and_instance_lock(monkeypatch, tmp_path):
         def run(self):
             calls.append("run")
 
-    monkeypatch.delenv("PHRAMA_SMOKE_EXIT_AFTER_START", raising=False)
+    monkeypatch.delenv("PHARMA_SMOKE_EXIT_AFTER_START", raising=False)
     monkeypatch.setattr(
         "pharma_proto.launcher.InstanceLock.acquire", lambda path: FakeLock()
     )

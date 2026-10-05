@@ -64,7 +64,7 @@ def test_preferences_round_trip_and_first_paint_theme(tmp_path: Path, monkeypatc
     assert (put.status_code, put.get_json()) == (200, {"theme": "dark"})
     page = client.get("/").get_data(as_text=True)
     assert 'data-theme="dark"' in page and 'aria-label="밝은 화면으로 전환"' in page and ">인쇄<" in page
-    saved = tmp_path / "local" / "PhramaProto" / "preferences.json"
+    saved = tmp_path / "local" / "PharmaProto" / "preferences.json"
     assert json.loads(saved.read_text(encoding="utf-8")) == {"theme": "dark"}
 
 

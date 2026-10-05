@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PYTHON = Path(sys.executable)
 
 
-# DB 저장소 전용 테스트(ingest/collect import)는 Phrama_Proto 로 남겼다.
+# DB 저장소 전용 테스트(ingest/collect import)는 Pharma_Proto 로 남겼다.
 
 
 def test_default_smiles_cache_is_owned_by_local_application_data(tmp_path, monkeypatch):
@@ -22,6 +22,6 @@ def test_default_smiles_cache_is_owned_by_local_application_data(tmp_path, monke
 
     resolver = SmilesResolver(offline=True)
 
-    expected = local_app_data / "PhramaProto" / "cache" / "smiles.json"
+    expected = local_app_data / "PharmaProto" / "cache" / "smiles.json"
     assert resolver._path == expected
     assert not expected.exists()

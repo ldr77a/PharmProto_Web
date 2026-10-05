@@ -18,12 +18,12 @@ if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
     throw "APP-START-001 LOCALAPPDATA is required"
 }
 
-$appRoot = Join-Path $env:LOCALAPPDATA "PhramaProto"
+$appRoot = Join-Path $env:LOCALAPPDATA "PharmaProto"
 $toolsRoot = Join-Path $appRoot "tools"
 $logsRoot = Join-Path $appRoot "logs"
 $logPath = Join-Path $logsRoot "bootstrap.log"
 $uvExe = Join-Path $toolsRoot "uv.exe"
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("PhramaProto-bootstrap-" + [guid]::NewGuid().ToString("N"))
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("PharmaProto-bootstrap-" + [guid]::NewGuid().ToString("N"))
 $env:UV_PROJECT_ENVIRONMENT = Join-Path $appRoot "runtime\venv"
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $appRoot "runtime\python"
 $env:UV_CACHE_DIR = Join-Path $appRoot "runtime\uv-cache"

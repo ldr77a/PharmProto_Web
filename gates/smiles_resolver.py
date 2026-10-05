@@ -20,7 +20,7 @@ from pathlib import Path
 
 def _default_cache_path() -> Path:
     local_root = Path(os.environ.get("LOCALAPPDATA", Path.cwd() / ".runtime"))
-    return local_root / "PhramaProto" / "cache" / "smiles.json"
+    return local_root / "PharmaProto" / "cache" / "smiles.json"
 
 _PUBCHEM = ("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/"
             "{name}/property/SMILES/JSON")

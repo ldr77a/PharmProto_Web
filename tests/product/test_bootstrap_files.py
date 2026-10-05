@@ -25,7 +25,7 @@ def test_start_bat_passes_a_valid_project_root_to_powershell(tmp_path: Path):
 
     environment = os.environ.copy()
     environment["LOCALAPPDATA"] = str(tmp_path / "local-app-data")
-    environment["PHRAMA_NONINTERACTIVE"] = "1"
+    environment["PHARMA_NONINTERACTIVE"] = "1"
     result = subprocess.run(
         ["cmd.exe", "/d", "/c", str(tmp_path / "start.bat")],
         cwd=tmp_path,
@@ -87,7 +87,7 @@ def test_runtime_environment_is_pinned_under_localappdata_before_uv_runs():
     batch = (ROOT / "start.bat").read_text(encoding="utf-8").lower()
     bootstrap = (ROOT / "tools" / "bootstrap-runtime.ps1").read_text(encoding="utf-8").lower()
     for name in ("uv_project_environment", "uv_python_install_dir", "uv_cache_dir"):
-        assert f'set "{name}=%localappdata%\\phramaproto\\runtime' in batch
+        assert f'set "{name}=%localappdata%\\pharmaproto\\runtime' in batch
         assert f'$env:{name} = join-path $approot "runtime' in bootstrap
         assert bootstrap.index(f'$env:{name}') < bootstrap.index("& $uvexe --version")
         assert bootstrap.index(f'$env:{name}') < bootstrap.index("& $uvexe python install")

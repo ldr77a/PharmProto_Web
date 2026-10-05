@@ -458,8 +458,8 @@ def request_summary_html(spec, candidates) -> str:
     return f"<div class='card request-summary'><h4>요청 해석</h4><dl>{rows}</dl></div>"
 
 
-RESULT_FRAGMENT_START = "<!-- phrama:result -->"
-RESULT_FRAGMENT_END = "<!-- /phrama:result -->"
+RESULT_FRAGMENT_START = "<!-- pharma:result -->"
+RESULT_FRAGMENT_END = "<!-- /pharma:result -->"
 
 
 def standalone_result_html(fragment: str, *, css_text: str, title: str, turns=()) -> str:
@@ -495,7 +495,7 @@ def print_header_html(meta) -> str:
     dl = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(str(v))}</dd>" for k, v in rows)
     return (
         "<header class='print-header print-only'>"
-        "<p class='eyebrow'>PHRAMA PROTO · LOCAL RESEARCH TOOL</p>"
+        "<p class='eyebrow'>PHARMA PROTO · LOCAL RESEARCH TOOL</p>"
         "<h2>신약 배합 생성기 결과</h2>"
         f"<dl>{dl}</dl>"
         "<p class='print-disclaimer'>연구 검토용 시제품의 출력입니다. 조성 수치는 지식 데이터베이스 근거로 "

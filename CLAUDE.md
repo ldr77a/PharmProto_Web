@@ -13,7 +13,7 @@ Docstrings, comments, and user-facing strings are Korean; code identifiers are E
 
 ## Two repositories, one contract
 
-| | This repository (app, `PhramaProto-0.1`) | `Phrama_Proto` (DB, `../Phrama_Proto`) |
+| | This repository (app, `PharmaProto-0.1`) | `Pharma_Proto` (DB, `../Pharma_Proto`) |
 |---|---|---|
 | Owns | `pharma_proto/app.py`, launcher, `llm/`, `gates/*` (except `kg_util`), `generation/*`, `static/`, `templates/`, `start.bat`, `tools/build-release.ps1`, tests | Neo4j pipelines, ingestion, cleaning, normalization, ingredient merging, SQLite exporter, **contract files** |
 | Storage | read-only `release-data/knowledge.sqlite` (git LFS) | live Neo4j (Docker) |
@@ -23,7 +23,7 @@ Docstrings, comments, and user-facing strings are Korean; code identifiers are E
 `tools/publish_snapshot.py` together with `release-data/`:
 `pharma_proto/knowledge/{snapshot,sqlite_repository,contracts,evidence,function_taxonomy}.py`,
 `cleaning/canonical_base.py`, `gates/kg_util.py`, `function_seed.json`, `pharma_proto/cli.py`. If a change seems needed in one
-of them, make it in `Phrama_Proto` and re-publish; editing them here silently desynchronizes the lookup
+of them, make it in `Pharma_Proto` and re-publish; editing them here silently desynchronizes the lookup
 keys. Runtime data such as `generation/standard_doses.json` is owned here.
 
 `release-data/manifest.json` carries the snapshot id, SHA-256, schema version, and counts. The app
@@ -87,8 +87,8 @@ fallback is user value → KG median (`lookup_api_doses`) → `generation/standa
   exception text, paths, keys, or provider payloads into a response or a log.
 - **API keys are process-memory only** (`llm/memory_keys.py`); `POST /api/logout` clears them together with
   the conversation store. The only persisted settings are non-secret display preferences in
-  `LOCALAPPDATA/PhramaProto/preferences.json` (`pharma_proto/preferences.py`: allowlisted keys, rejects names
-  matching `key|secret|token|password`). Saved results live under `LOCALAPPDATA/PhramaProto/results/`
+  `LOCALAPPDATA/PharmaProto/preferences.json` (`pharma_proto/preferences.py`: allowlisted keys, rejects names
+  matching `key|secret|token|password`). Saved results live under `LOCALAPPDATA/PharmaProto/results/`
   (`pharma_proto/results_store.py`), written only when the user clicks save, never containing keys, and the
   app returns them as JSON (ids, never paths).
 - **No browser storage**: `tests/product/test_mvp_app.py` fails if `static/app.js` mentions `localStorage`,
@@ -106,7 +106,7 @@ uv sync
 uv run pytest                          # on macOS: LOCALAPPDATA=/tmp/localappdata and deselect the Windows-only product tests
 node --test tests/test_app_js.mjs      # app.js in a fake DOM; add new element ids to its `elements` map
 uv run ruff check .
-pwsh tools/build-release.ps1          # → dist/PhramaProto-<app-version>-<snapshot-id>.zip (Windows)
+pwsh tools/build-release.ps1          # → dist/PharmaProto-<app-version>-<snapshot-id>.zip (Windows)
 ```
 
 `tools/build-release.ps1` holds the **authoritative file allowlist** for the Release ZIP. If you add a
@@ -114,6 +114,6 @@ module that the app imports at runtime, add it to `$runtimePackageFiles` or the 
 it (`tools/check-release-tree.ps1` audits the staged tree). `docs/release/*-manifest.json` records
 each shipped build's snapshot.
 
-Receiving a new snapshot: run `python tools/publish_snapshot.py --confirm` in `Phrama_Proto`, then here
+Receiving a new snapshot: run `python tools/publish_snapshot.py --confirm` in `Pharma_Proto`, then here
 `git add release-data gates/kg_util.py …` and commit (git-lfs must be installed because
 `release-data/knowledge.sqlite` is an LFS file). Rebuild the ZIP afterwards.

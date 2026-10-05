@@ -564,7 +564,7 @@ def test_save_list_open_resume_and_delete_round_trip(app_factory, monkeypatch, t
 
     assert saved.status_code == 200
     result_id = saved.get_json()["result_id"]
-    folder = tmp_path / "PhramaProto" / "results" / result_id
+    folder = tmp_path / "PharmaProto" / "results" / result_id
     assert (folder / "request.json").is_file() and (folder / "조성_후보_1.xlsx").is_file()
     assert "test-key" not in (folder / "request.json").read_text(encoding="utf-8")
     assert "검토용." in (folder / "result.html").read_text(encoding="utf-8")
@@ -607,7 +607,7 @@ def test_answer_followup_after_save_is_appended_to_the_saved_folder(app_factory,
     client.post("/api/followup", json={"provider": "openai", "tier": "normal",
                                        "conversation_id": first["conversation_id"], "question": "왜 이 희석제?"})
 
-    folder = tmp_path / "PhramaProto" / "results" / result_id
+    folder = tmp_path / "PharmaProto" / "results" / result_id
     turns = json.loads((folder / "followup.json").read_text(encoding="utf-8"))
     assert [t["kind"] for t in turns] == ["question", "question", "answer"]
     assert "희석제는 범위 안이다." in (folder / "result.html").read_text(encoding="utf-8")
@@ -620,7 +620,7 @@ def test_resume_refuses_other_snapshot_and_unknown_ids(app_factory, tmp_path: Pa
     client.post("/api/key", json={"provider": "openai", "api_key": "test-key"})
     first = client.post("/api/generate", json={"provider": "openai", "tier": "normal", "question": "q"}).get_json()
     result_id = client.post("/api/results", json={"conversation_id": first["conversation_id"]}).get_json()["result_id"]
-    request_file = tmp_path / "PhramaProto" / "results" / result_id / "request.json"
+    request_file = tmp_path / "PharmaProto" / "results" / result_id / "request.json"
     request = json.loads(request_file.read_text(encoding="utf-8"))
     request["snapshot_id"] = "older-snapshot"
     request_file.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
@@ -663,7 +663,7 @@ def test_generate_logs_safe_provider_diagnostics(app_factory, tmp_path: Path) ->
     )
 
     assert response.status_code == 502
-    rows = (tmp_path / "PhramaProto" / "logs" / "app.log").read_text(encoding="utf-8")
+    rows = (tmp_path / "PharmaProto" / "logs" / "app.log").read_text(encoding="utf-8")
     row = json.loads(rows.splitlines()[-1])
     assert row["provider_code"] == "400"
     assert row["provider_status"] == "INVALID_ARGUMENT"
@@ -773,7 +773,7 @@ def test_explain_failure_returns_code_and_leaves_table(app_factory, monkeypatch,
                                                  "conversation_id": data["conversation_id"], "candidate_idx": 1})
 
     assert response.status_code == 502 and response.get_json() == {"error": "LLM-RATE-001"}
-    rows = (tmp_path / "PhramaProto" / "logs" / "app.log").read_text(encoding="utf-8")
+    rows = (tmp_path / "PharmaProto" / "logs" / "app.log").read_text(encoding="utf-8")
     assert "LLM-RATE-001" in rows.splitlines()[-1]
 
 

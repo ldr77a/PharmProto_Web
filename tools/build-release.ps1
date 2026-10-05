@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
-$stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("PhramaProto-release-" + [guid]::NewGuid().ToString("N"))
+$stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("PharmaProto-release-" + [guid]::NewGuid().ToString("N"))
 $temporaryZip = $null
 
 function Resolve-ProjectRelativePath {
@@ -163,7 +163,7 @@ try {
         [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot $OutputDirectory))
     }
     New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-    $archiveName = "PhramaProto-$appVersion-$safeSnapshotId.zip"
+    $archiveName = "PharmaProto-$appVersion-$safeSnapshotId.zip"
     $archivePath = Join-Path $outputRoot $archiveName
     $temporaryZip = Join-Path $outputRoot ("." + $archiveName + "." + [guid]::NewGuid().ToString("N") + ".tmp.zip")
     Compress-Archive -Path (Join-Path $stagingRoot "*") -DestinationPath $temporaryZip -CompressionLevel Optimal

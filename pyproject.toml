@@ -30,7 +30,7 @@ packages = ["pharma_proto", "generation", "gates", "cleaning"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-m 'not neo4j'"
-cache_dir = "$LOCALAPPDATA/PhramaProto/runtime/pytest-cache"
+cache_dir = "$LOCALAPPDATA/PharmaProto/runtime/pytest-cache"
 markers = [
   "hpe6: requires the curated HPE6 reference dataset",
   "neo4j: requires an explicitly configured live Neo4j database",

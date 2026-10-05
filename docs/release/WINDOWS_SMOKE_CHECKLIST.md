@@ -14,7 +14,7 @@
 ## 설치·시작
 
 - [ ] 관리자 권한이 없는 계정으로 로그인했다.
-- [ ] 이전 `PhramaProto` 프로세스가 없는 깨끗한 상태에서 시작했다.
+- [ ] 이전 `PharmaProto` 프로세스가 없는 깨끗한 상태에서 시작했다.
 - [ ] ZIP을 공백과 한글이 포함된 새 폴더에 풀었다.
 - [ ] Windows Defender가 켜진 상태에서 `start.bat`을 실행했다.
 - [ ] 첫 실행에서 uv 0.12.0과 CPython 3.12.13의 검증·설치가 완료됐다.
@@ -40,7 +40,7 @@
 ## 운영·복구
 
 - [ ] 실행 중 `start.bat`을 다시 열면 새 서버를 만들지 않고 기존 화면을 연다.
-- [ ] `%LOCALAPPDATA%\PhramaProto\logs\app.log`가 회전하며 질문, 응답, API 키가 없다.
+- [ ] `%LOCALAPPDATA%\PharmaProto\logs\app.log`가 회전하며 질문, 응답, API 키가 없다.
 - [ ] `/api/diagnostics`에 app/snapshot/schema/provider 상태와 공개 오류 코드만 보인다.
 - [ ] 현재 폴더를 수정하지 않고 이전 검증 ZIP을 새 폴더에 풀어 롤백할 수 있다.
 - [ ] 이전 ZIP과 새 ZIP을 각각 실행했을 때 각자의 Snapshot ID가 정확히 표시된다.

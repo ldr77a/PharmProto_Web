@@ -152,7 +152,13 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
     if supplied:
         raise TypeError("unsupported application override")
 
-    local_root = Path(os.environ.get("LOCALAPPDATA", str(_ROOT / ".runtime"))) / "PhramaProto"
+    local_root = Path(os.environ.get("LOCALAPPDATA", str(_ROOT / ".runtime"))) / "PharmaProto"
+    legacy_root = local_root.parent / "PhramaProto"   # 2026-10-05 이전 오타 폴더명: 있으면 한 번만 옮긴다
+    if legacy_root.is_dir() and not local_root.exists():
+        try:
+            legacy_root.rename(local_root)
+        except OSError:
+            pass
     diagnostics: SafeDiagnostics = configure_safe_logging(local_root / "logs")
     try:
         repository = SQLiteKnowledgeRepository.open(snapshot_path, manifest_path)

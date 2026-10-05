@@ -36,7 +36,7 @@
 5. **해설·후속 프롬프트** — `EXPLAIN_INSTRUCTION`·`FOLLOWUP_INSTRUCTION` 의 "경구 고형제" 를 프로파일 이름으로 치환.
 6. **설명 사전(`generation/help_text.py`)** — 액제 게이트·단위 설명 추가.
 
-## DB 쪽 요구사항 (Phrama_Proto)
+## DB 쪽 요구사항 (Pharma_Proto)
 
 - 액제 역할 사전: `solvent`/`vehicle`, `preservative`, `buffer`, `sweetener`, `flavoring_agent`, `suspending_agent`,
   `viscosity_agent`, `wetting_agent`, `antioxidant`, `chelating_agent`, `cosolvent`.

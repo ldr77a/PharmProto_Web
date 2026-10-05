@@ -1,4 +1,4 @@
-"""저장된 작업 — LOCALAPPDATA/PhramaProto/results/<YYYYMMDDTHHMMSSZ>-<conversation_id[:8]>/.
+"""저장된 작업 — LOCALAPPDATA/PharmaProto/results/<YYYYMMDDTHHMMSSZ>-<conversation_id[:8]>/.
 
 사용자가 '이 결과 저장'을 눌렀을 때만 쓴다(자동 저장 없음). 폴더마다:
   request.json      요청·스냅샷·모델·앱 버전(API 키는 절대 넣지 않는다)
@@ -108,11 +108,11 @@ class ResultsStore:
         그 밖의 경로(예: 테스트의 임시 폴더)는 폴더 이름만 — 응답에 실제 경로를 싣지 않는 규칙.
         """
         if os.name == "nt":
-            return r"%LOCALAPPDATA%\PhramaProto\results"
+            return r"%LOCALAPPDATA%\PharmaProto\results"
         try:
             return "~/" + self._root.resolve().relative_to(Path.home().resolve()).as_posix()
         except ValueError:
-            return "PhramaProto/results (앱 데이터 폴더)"
+            return "PharmaProto/results (앱 데이터 폴더)"
 
     def open_folder(self, opener: Callable[[Path], None] | None = None) -> None:
         """저장 폴더를 탐색기로 연다. 없으면 먼저 만든다(사용자가 찾기 쉽게)."""

@@ -1,4 +1,4 @@
-"""비밀이 아닌 화면 설정만 담는 작은 JSON 저장소 — LOCALAPPDATA/PhramaProto/preferences.json.
+"""비밀이 아닌 화면 설정만 담는 작은 JSON 저장소 — LOCALAPPDATA/PharmaProto/preferences.json.
 
 허용 키·허용 값만 읽고 쓴다. 키 이름이 비밀처럼 보이면(key|secret|token|password) 거부한다.
 파일이 없거나 깨졌으면 기본값으로 동작하고, 쓰기 실패(OSError)는 호출자가 코드로만 기록한다.

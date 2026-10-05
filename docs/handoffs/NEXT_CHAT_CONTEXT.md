@@ -1,7 +1,7 @@
 # 다음 세션 인수인계 (2026-10-04 밤, 피드백 9항목 대응 뒤 기준)
 
-이 파일은 앱 저장소(PhramaProto-0.1)에서 새 Claude Code 세션을 열 때 첫 명령으로 읽히는 용도다.
-DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더에 묶여 있어 여기서는 보이지 않는다. 필요한 맥락을 전부 적는다.
+이 파일은 앱 저장소(PharmaProto-0.1)에서 새 Claude Code 세션을 열 때 첫 명령으로 읽히는 용도다.
+DB 저장소(`../Pharma_Proto`)에서 작업하던 세션의 메모리는 폴더에 묶여 있어 여기서는 보이지 않는다. 필요한 맥락을 전부 적는다.
 
 ## 1. 현재 상태
 
@@ -16,7 +16,7 @@ DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더
   **주의**: 8765 를 이전 세션의 서버가 잡고 있을 수 있다(`lsof -nP -iTCP:8765 -sTCP:LISTEN`). 그 서버는 구 스냅샷(schema 1)이고 새 라우트가 없다.
 - 정식 실행은 Windows `start.bat`. **릴리스 ZIP 은 아직 다시 만들지 않았다** — 새 모듈 5개가 허용목록에 들어갔으니 Windows 에서
   `pwsh tools/build-release.ps1` 후 `docs/release/WINDOWS_SMOKE_CHECKLIST.md` 로 확인해야 한다.
-- LLM 키는 화면의 "API 설정"에 넣는다(메모리에만, 로그아웃이 지움). 개발 중 Claude 키는 `../Phrama_Proto/.env` 의 `CLAUDE_API_KEY` 에 있다. 채팅에 붙이지 말 것.
+- LLM 키는 화면의 "API 설정"에 넣는다(메모리에만, 로그아웃이 지움). 개발 중 Claude 키는 `../Pharma_Proto/.env` 의 `CLAUDE_API_KEY` 에 있다. 채팅에 붙이지 말 것.
 - **실제 LLM 으로 끝까지 돌려 본 적은 없다**(가짜 서비스 테스트만). 다음 세션 첫 작업으로 Claude 키를 넣고 §6 의 수동 시나리오를 돌려 보기를 권한다.
 
 ## 2. 절대 규칙 (CLAUDE.md 와 동일, 다시 강조)
@@ -36,12 +36,12 @@ DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더
 | 1 | 후속·보완 질문 불가 | **완료** | `POST /api/followup`. LLM 이 의도 분류(`FollowUpResponse.action` refine/answer). refine 은 전체 `ParsedRequest` 를 돌려주고 서버가 `request_changes` 로 diff → 바뀐 게 있을 때만 `to_domain()` 으로 재생성·재해설. answer 는 문장마다 근거/일반지식 배지. 대화는 `pharma_proto/conversation.py`(메모리 LRU 20). 화면: 결과 아래 '이 결과에 이어서 질문' |
 | 2 | 비고형 제형 | **진입점만** | 비고형 요청은 `400 REQUEST-FORM-001` + 한국어 안내(전에는 500). 본 구현 설계는 `docs/design/liquid-dosage-forms.md` |
 | 3 | 세부 지정(질량·성분명) 무시 | **완료** | `ParsedRequest.amounts[{ingredient, mg|pct}]` → `FormulationSpec.user_amounts` → 후보별 역할 키로 재배열 → `allocate(user_pcts, user_mgs)`. 총중량 없고 희석제 분량만 있으면 역산. 사용자 총중량은 `_adjust_total` 재시도로 바꾸지 않음. 게이트1 위반이 사용자 지정 성분뿐이면 '조건부'(칩은 실패 그대로). 결과 상단 '요청 해석' 카드가 인식된 요청·미반영 분량을 보여 줌 |
-| 4 | 화면색 밝게 | **완료** | 라이트 기본 + OS 다크 자동 + 수동 토글(시스템/밝게/어둡게). 선택값은 `LOCALAPPDATA/PhramaProto/preferences.json`(`pharma_proto/preferences.py`, 허용 키만). 첫 화면은 서버가 `data-theme` 렌더 |
+| 4 | 화면색 밝게 | **완료** | 라이트 기본 + OS 다크 자동 + 수동 토글(시스템/밝게/어둡게). 선택값은 `LOCALAPPDATA/PharmaProto/preferences.json`(`pharma_proto/preferences.py`, 허용 키만). 첫 화면은 서버가 `data-theme` 렌더 |
 | 5 | 인쇄 | **완료** | '인쇄' 버튼 + `@media print`(밝은 토큰 강제, 컨트롤 숨김, 인쇄 머리글: 요청·시각·DB 스냅샷·모델·면책, 후속 질의응답 포함). `beforeprint` 에서 접힌 해설 펼침 |
 | 6 | 비전문가용 설명, 근거 클릭 | **완료** | `generation/help_text.py` 한 곳의 문장을 사이드바와 팝오버가 공유. 근거 꼬리표·게이트 칩·상태 배지·근거/일반지식 배지가 `data-help` 버튼. 사이드바 '이 도구는 일반 AI 와 무엇이 다른가요?' |
 | 7 | 로그아웃 | **완료** | `POST /api/logout` 이 키·대화를 비움. 버튼 '로그아웃 (API 키 삭제)', 설정 카드에 키 보관 방식 안내 |
 | 8 | LLM 보다 품질 낮음 | **설명·(b)총중량 완료, (a)공정 규칙 미착수** | 사용자 총중량·분량 존중(3번과 같이), 해설층(이전 세션), '일반 AI 와 다른 점' 패널. 공정 규칙 JSON 설계는 `docs/design/liquid-dosage-forms.md` 하단 |
-| 9 | 작업 저장 | **완료(수동)** | '이 결과 저장' → `LOCALAPPDATA/PhramaProto/results/<시각>-<대화id8>/`(request.json·독립 result.html·explanation.json·followup.json·xlsx). 사이드바 '저장된 작업': 열기(읽기 전용)·이어서 질문(저장된 ParsedRequest 로 결정적 재계산, LLM 호출 없음, 다른 스냅샷이면 409)·삭제 |
+| 9 | 작업 저장 | **완료(수동)** | '이 결과 저장' → `LOCALAPPDATA/PharmaProto/results/<시각>-<대화id8>/`(request.json·독립 result.html·explanation.json·followup.json·xlsx). 사이드바 '저장된 작업': 열기(읽기 전용)·이어서 질문(저장된 ParsedRequest 로 결정적 재계산, LLM 호출 없음, 다른 스냅샷이면 409)·삭제 |
 
 **디자인 전면 개편(2026-10-05, 사용자와 문답으로 결정)**: 연구 노트형(종이 톤 + 잉크 남색, DB 근거는 초록 유지), 작업대형 2단
 (왼쪽 고정 열에 질문·후속 질문, 오른쪽에 결과), 후보가 2개 이상이면 결과 상단에 후보 요약 띠(`candidate_strip_html`, `#candidate-N` 앵커),
@@ -79,7 +79,7 @@ DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더
 1. 3번: "아세트아미노펜 500 mg, MCC 20%, 크로스포비돈 4%, 스테아르산마그네슘 1%, 총 700 mg 속방정" → 표에 지정 % 와 '사용자 지정' 라벨, 총 700 mg, '요청 해석' 카드.
 2. 1번: "총중량 650 mg 으로" → 표 교체 + 변경 한 줄; "왜 MCC 를 골랐어?" → 답변 카드와 근거/일반지식 배지.
 3. 7·4·5: 로그아웃 뒤 `/health` providers false; 토글 3단 순환 후 새로고침 유지; 인쇄 미리보기에서 컨트롤 숨김·카드 분리·해설 펼침·밝은 색.
-4. 9: 저장 → `%LOCALAPPDATA%\PhramaProto\results\<id>\` 파일 5종, 목록에서 열기·이어서 질문·삭제; `result.html` 을 브라우저로 직접 열어 서식 확인.
+4. 9: 저장 → `%LOCALAPPDATA%\PharmaProto\results\<id>\` 파일 5종, 목록에서 열기·이어서 질문·삭제; `result.html` 을 브라우저로 직접 열어 서식 확인.
 5. 6: 근거 꼬리표·게이트 칩·배지 클릭 → 팝오버, ESC 닫힘.
 6. 2: "리도카인 2% 주사제" → 400 과 한국어 안내.
 

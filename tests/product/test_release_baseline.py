@@ -50,7 +50,7 @@ def _tracked_files() -> set[str]:
 
 def test_checked_in_baseline_contains_runtime_and_reference_assets():
     tracked = _tracked_files()
-    # 앱 저장소 기준: ingest/normalization/schema.json 은 DB 저장소(Phrama_Proto) 소유라 여기엔 없다.
+    # 앱 저장소 기준: ingest/normalization/schema.json 은 DB 저장소(Pharma_Proto) 소유라 여기엔 없다.
     required = {
         "pharma_proto/app.py",
         "generation/generation_loop.py",

@@ -53,7 +53,7 @@ def test_save_writes_standalone_html_xlsx_and_request_without_keys(tmp_path: Pat
     page = (folder / "result.html").read_text(encoding="utf-8")
     assert page.startswith("<!doctype html>") and "data-theme='light'" in page
     assert _CSS in page and ".print-only { display: block; }" in page       # 파일만 열어도 서식·머리글이 보인다
-    assert "<!-- phrama:result -->" in page and "반드시 사람이 검토" in page
+    assert "<!-- pharma:result -->" in page and "반드시 사람이 검토" in page
     assert (folder / "조성_후보_1.xlsx").read_bytes() == _XLSX
     request = json.loads((folder / "request.json").read_text(encoding="utf-8"))
     assert request["schema"] == 1 and request["id"] == result_id
@@ -149,14 +149,14 @@ def test_invalid_ids_are_rejected_without_touching_disk(tmp_path: Path, bad: str
 def test_location_hint_hides_real_paths_outside_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pharma_proto.results_store.os.name", "posix")
     outside = _store(tmp_path).location_hint()
-    assert str(tmp_path) not in outside and "PhramaProto/results" in outside
+    assert str(tmp_path) not in outside and "PharmaProto/results" in outside
 
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    under_home = ResultsStore(tmp_path / "Library" / "PhramaProto" / "results", css_text=_CSS, app_version="0.1.0")
-    assert under_home.location_hint() == "~/Library/PhramaProto/results"
+    under_home = ResultsStore(tmp_path / "Library" / "PharmaProto" / "results", css_text=_CSS, app_version="0.1.0")
+    assert under_home.location_hint() == "~/Library/PharmaProto/results"
 
     monkeypatch.setattr("pharma_proto.results_store.os.name", "nt")
-    assert _store(tmp_path).location_hint() == r"%LOCALAPPDATA%\PhramaProto\results"
+    assert _store(tmp_path).location_hint() == r"%LOCALAPPDATA%\PharmaProto\results"
 
 
 def test_open_folder_creates_root_and_calls_opener(tmp_path: Path) -> None:
