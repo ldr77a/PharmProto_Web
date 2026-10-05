@@ -232,8 +232,9 @@ def test_first_load_only_exposes_api_setup(app_factory) -> None:
     probe = _ElementProbe()
     probe.feed(page)
 
-    assert 'data-theme="system"' in page
-    assert probe.text("theme-toggle") == "화면: 시스템" and probe.text("print") == "인쇄"
+    assert 'data-theme="light"' in page                                   # 기본은 밝은 화면
+    assert probe.attrs("theme-toggle")["aria-label"] == "어두운 화면으로 전환"   # 오른쪽 아래 해·달 버튼
+    assert probe.attrs("theme-toggle")["class"] == "theme-fab" and probe.text("print") == "인쇄"
     assert "hidden" not in probe.attrs("api-setup")
     assert "hidden" in probe.attrs("research-app")
     assert "hidden" in probe.attrs("review-notice")

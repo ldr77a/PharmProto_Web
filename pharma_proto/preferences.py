@@ -13,9 +13,9 @@ import threading
 from collections.abc import Mapping
 from pathlib import Path
 
-THEMES = ("system", "light", "dark")
+THEMES = ("system", "light", "dark")      # 'system' 은 예전 저장값 호환용(OS 설정을 따름)
 ALLOWED: dict[str, tuple[str, ...]] = {"theme": THEMES}
-DEFAULTS: dict[str, str] = {"theme": "system"}
+DEFAULTS: dict[str, str] = {"theme": "light"}   # 기본은 밝은 화면
 _SECRET_SHAPE = re.compile(r"key|secret|token|password", re.IGNORECASE)
 
 

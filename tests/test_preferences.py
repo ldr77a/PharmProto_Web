@@ -16,11 +16,11 @@ def test_store_defaults_when_file_is_missing_or_corrupt(tmp_path: Path) -> None:
     path = tmp_path / "preferences.json"
     store = PreferenceStore(path)
 
-    assert store.load() == {"theme": "system"}
+    assert store.load() == {"theme": "light"}
     path.write_text("{not json", encoding="utf-8")
-    assert store.load() == {"theme": "system"}
+    assert store.load() == {"theme": "light"}
     path.write_text("[1, 2]", encoding="utf-8")
-    assert store.load() == {"theme": "system"}
+    assert store.load() == {"theme": "light"}
 
 
 def test_store_updates_only_allowed_keys_and_values(tmp_path: Path) -> None:
@@ -55,15 +55,15 @@ def _app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def test_preferences_round_trip_and_first_paint_theme(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     client = _app(tmp_path, monkeypatch).test_client()
 
-    assert client.get("/api/preferences").get_json() == {"theme": "system"}
+    assert client.get("/api/preferences").get_json() == {"theme": "light"}      # 기본은 밝은 화면
     first = client.get("/").get_data(as_text=True)
-    assert 'data-theme="system"' in first and "화면: 시스템" in first
+    assert 'data-theme="light"' in first and 'aria-label="어두운 화면으로 전환"' in first
 
     put = client.put("/api/preferences", json={"theme": "dark"})
 
     assert (put.status_code, put.get_json()) == (200, {"theme": "dark"})
     page = client.get("/").get_data(as_text=True)
-    assert 'data-theme="dark"' in page and "화면: 어둡게" in page and ">인쇄<" in page
+    assert 'data-theme="dark"' in page and 'aria-label="밝은 화면으로 전환"' in page and ">인쇄<" in page
     saved = tmp_path / "local" / "PhramaProto" / "preferences.json"
     assert json.loads(saved.read_text(encoding="utf-8")) == {"theme": "dark"}
 
@@ -76,4 +76,4 @@ def test_preferences_reject_bad_values_and_extra_fields(tmp_path: Path, monkeypa
 
     assert (neon.status_code, neon.get_json()) == (400, {"error": "REQUEST-001"})
     assert (extra.status_code, extra.get_json()) == (400, {"error": "REQUEST-001"})
-    assert client.get("/api/preferences").get_json() == {"theme": "system"}
+    assert client.get("/api/preferences").get_json() == {"theme": "light"}

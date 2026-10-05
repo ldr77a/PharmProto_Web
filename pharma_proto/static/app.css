@@ -263,6 +263,22 @@ details { margin-top: 14px; }
 .refs { color: var(--text-muted); font-size: 12px; margin-left: 4px; }
 .caution { color: var(--warn); font-size: 13px; margin-top: 4px; font-weight: 600; }
 
+/* 화면 색 전환: 오른쪽 아래 둥근 버튼. 밝은 화면에서는 달, 어두운 화면에서는 해가 보인다 */
+.theme-fab {
+  position: fixed; right: 22px; bottom: 22px; z-index: 25; width: 50px; height: 50px; padding: 0; min-height: 0;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--primary); color: var(--on-primary); border-color: var(--primary);
+  box-shadow: 0 12px 28px -12px rgb(20 24 34 / .55);
+}
+.theme-fab svg { width: 22px; height: 22px; }
+.theme-fab .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-fab .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-fab .icon-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-fab .icon-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-fab .icon-moon { display: none; }
+}
+
 /* 클릭 설명: 근거 꼬리표·게이트 칩·배지는 버튼이지만 생김새는 라벨 그대로 */
 .help-trigger { background: none; border: 0; padding: 0; min-height: 0; border-radius: var(--radius-sm); font: inherit; font-weight: inherit; color: inherit; text-align: left; cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
 .help-trigger:hover:not(:disabled) { background: none; color: var(--primary); }
@@ -349,7 +365,7 @@ button.g.fail:hover:not(:disabled), button.badge.bad:hover:not(:disabled) { back
   main { width: 100%; margin: 0; }
   .workbench { display: block; padding-top: 0; }
   .topbar, .bench-left, .result-actions, .side-panel, .panel-backdrop, .skip-link, .message,
-  .empty-state, .skeleton, .download-xlsx, #help-popover { display: none !important; }
+  .empty-state, .skeleton, .download-xlsx, .theme-fab, #help-popover { display: none !important; }
   .print-only { display: block !important; }
   .print-header { margin: 0 0 16px; padding: 0 0 12px; border-bottom: 2px solid var(--border-strong); }
   .print-header h2 { margin: 4px 0 10px; font-size: 22px; }

@@ -72,7 +72,7 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
     "#health": fakeElement(),
     "#save-key": fakeElement(),
     "#logout": fakeElement(),
-    "#theme-toggle": fakeElement({textContent: "화면: 시스템"}),
+    "#theme-toggle": fakeElement(),
     "#print": fakeElement(),
     "#result-actions": fakeElement({hidden: true}),
     "#save-result": fakeElement(),
@@ -139,7 +139,7 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
     },
   };
 
-  const documentElement = fakeElement({dataset: {theme: "system"}});
+  const documentElement = fakeElement({dataset: {theme: "light"}});
   const windowListeners = new Map();
   const documentListeners = new Map();
   const window = {
@@ -326,22 +326,21 @@ test("후속 질문: refine 이면 결과를 교체하고 answer 면 로그에�
   assert.equal(harness.elements["#followup-log"].children.length, 0);
 });
 
-test("화면 색 토글은 시스템→밝게→어둡게로 순환하며 서버에 저장하고, 인쇄 버튼은 window.print 를 부른다", async () => {
+test("해·달 버튼은 밝게↔어둡게를 바꿔 서버에 저장하고, 인쇄 버튼은 window.print 를 부른다", async () => {
   const harness = browserHarness();
-  assert.equal(harness.elements["#theme-toggle"].textContent, "화면: 시스템");
+  assert.equal(harness.documentElement.dataset.theme, "light");           // 기본은 밝은 화면
+  assert.equal(harness.elements["#theme-toggle"].ariaLabel, "어두운 화면으로 전환");
 
   await harness.elements["#theme-toggle"].dispatch("click");
 
-  assert.equal(harness.documentElement.dataset.theme, "light");
-  assert.equal(harness.elements["#theme-toggle"].textContent, "화면: 밝게");
+  assert.equal(harness.documentElement.dataset.theme, "dark");
+  assert.equal(harness.elements["#theme-toggle"].ariaLabel, "밝은 화면으로 전환");
   const [, options] = harness.fetchCalls.find(([url]) => url === "/api/preferences");
   assert.equal(options.method, "PUT");
-  assert.deepEqual(JSON.parse(options.body), {theme: "light"});
+  assert.deepEqual(JSON.parse(options.body), {theme: "dark"});
 
   await harness.elements["#theme-toggle"].dispatch("click");
-  assert.equal(harness.documentElement.dataset.theme, "dark");
-  await harness.elements["#theme-toggle"].dispatch("click");
-  assert.equal(harness.documentElement.dataset.theme, "system");
+  assert.equal(harness.documentElement.dataset.theme, "light");
 
   await harness.elements["#print"].dispatch("click");
   assert.ok(harness.eventLog.some(([event]) => event === "print"));

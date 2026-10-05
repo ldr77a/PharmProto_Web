@@ -66,14 +66,23 @@ function updateEmptyState() {
   resultsEmpty.hidden = results.querySelector(".card") !== null;
 }
 
-// 화면 색: 선택값은 서버의 preferences.json 에 저장한다(브라우저 저장소를 쓰지 않는 규칙).
-const THEME_ORDER = ["system", "light", "dark"];
-const THEME_LABELS = {system: "화면: 시스템", light: "화면: 밝게", dark: "화면: 어둡게"};
+// 화면 색: 기본은 밝은 화면. 오른쪽 아래 해·달 버튼이 밝게↔어둡게를 바꾸고, 선택값은 서버의
+// preferences.json 에 저장한다(브라우저 저장소를 쓰지 않는 규칙). 예전 값 'system' 은 OS 설정을 따른다.
+const THEMES = ["light", "dark", "system"];
+
+function isDarkNow() {
+  const theme = document.documentElement.dataset.theme;
+  if (theme === "dark") return true;
+  if (theme === "light") return false;
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
 
 function applyTheme(theme) {
-  const value = THEME_ORDER.includes(theme) ? theme : "system";
+  const value = THEMES.includes(theme) ? theme : "light";
   document.documentElement.dataset.theme = value;
-  themeToggle.textContent = THEME_LABELS[value];
+  const label = isDarkNow() ? "밝은 화면으로 전환" : "어두운 화면으로 전환";
+  themeToggle.ariaLabel = label;
+  themeToggle.title = label;
   return value;
 }
 
@@ -236,8 +245,7 @@ document.querySelector("#save-key").addEventListener("click", async () => {
 });
 
 themeToggle.addEventListener("click", async () => {
-  const current = document.documentElement.dataset.theme || "system";
-  const next = THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length];
+  const next = isDarkNow() ? "light" : "dark";
   applyTheme(next);
   try {
     await jsonRequest("/api/preferences", {
