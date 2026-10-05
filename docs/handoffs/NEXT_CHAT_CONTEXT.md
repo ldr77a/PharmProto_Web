@@ -92,4 +92,4 @@ DB 저장소(`../Phrama_Proto`)에서 작업하던 세션의 메모리는 폴더
 해설은 생성 결과를 입력으로 쓰므로 두 번째 LLM 호출을 없앨 수는 없다. 대신 가볍게 만들었다(실측, 트리메타지딘 3후보, Claude Sonnet 5.5):
 - effort high · 전체 해설: 91s, 출력 14k 토큰 → effort low · 분량 제한 · 후보 2 이후는 차이점만: 26~27s.
 - 적용 위치: `llm/service.py` `_structured_call(effort=...)`(Claude 만 output_config.effort), `EXPLAIN_INSTRUCTION` 8번 규칙.
-- 더 줄이려면: 해설을 `/api/generate` 에서 떼어 표를 먼저 보여 주고(파싱+생성 3~5초) 후보별 `/api/explain` 을 뒤에 호출(후보 1 자동, 나머지는 버튼). 후보 하나만 간결하게 쓰면 16s. 저장본(`/api/results`)과 후속 질문의 재해설도 같은 경로로 바꿔야 한다.
+- (적용됨) 해설은 `/api/generate` 밖으로 뺐다. 표는 파싱+생성만으로 뜨고, app.js 가 후보 1 은 자동으로, 나머지는 '해설 보기' 버튼으로 `POST /api/explain {conversation_id, candidate_idx}` 를 부른다. 서버는 후보 하나짜리 payload 로 해설을 받아 `conversation.explanation.candidates` 에 누적하고 `conversation.html` 을 다시 그린다(저장·후속·재개가 같은 해설을 본다). 저장은 해설이 붙은 뒤에 해야 저장본에 들어간다. 후속 '수정' 재생성 뒤에는 후보 1 해설을 다시 자동으로 부른다. 저장본 '열기'(대화 없음)는 버튼을 숨긴다.

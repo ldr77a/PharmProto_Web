@@ -133,6 +133,45 @@ function resetConversation() {
   saveStatus.textContent = "";
 }
 
+// 해설은 표와 분리해 뒤늦게 붙인다(후보 1 자동, 나머지는 '해설 보기'). 표는 파싱+생성만으로 바로 뜬다.
+async function loadExplanation(index) {
+  const slot = results.querySelector(`.explain-slot[data-explain-index="${index}"]`);
+  if (!slot || !conversationId) return;
+  const button = slot.querySelector(".explain-btn");
+  const status = slot.querySelector(".explain-status");
+  if (button) button.disabled = true;
+  if (status) status.textContent = "해설 작성 중… 15~30초";
+  try {
+    const data = await jsonRequest("/api/explain", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        provider: provider.value, tier: tier.value, conversation_id: conversationId, candidate_idx: Number(index),
+      }),
+    });
+    if (data.header_html) {
+      const head = results.querySelector("#explain-head-slot");
+      if (head && !head.innerHTML) head.innerHTML = data.header_html;
+    }
+    slot.innerHTML = data.html;
+  } catch (error) {
+    if (status) status.textContent = `해설 생성 실패 (${describeError(error)})`;
+    if (button) button.disabled = false;
+  }
+}
+
+function wireExplanations({autoFirst = true} = {}) {
+  const buttons = results.querySelectorAll(".explain-btn");
+  for (const button of buttons) {
+    if (!conversationId) {           // 저장본 열람(대화 없음): 해설은 저장 당시 것만
+      button.hidden = true;
+      continue;
+    }
+    button.addEventListener("click", () => loadExplanation(button.dataset.explainIndex));
+  }
+  if (autoFirst && conversationId && buttons.length) loadExplanation(buttons[0].dataset.explainIndex);
+}
+
 // 결과 표시는 생성·후속 수정·저장본 열기·이어서 질문이 모두 같은 길을 탄다.
 function showResult(data) {
   results.innerHTML = data.html;
@@ -328,7 +367,7 @@ tier.addEventListener("change", () => {
 
 const generateButton = document.querySelector("#generate");
 generateButton.addEventListener("click", async () => {
-  message.textContent = "생성 중… 조성표를 만든 뒤 LLM 해설을 작성합니다. 30초 안팎 걸립니다.";
+  message.textContent = "생성 중… 조성표는 몇 초 안에 뜨고, 해설은 뒤이어 붙습니다.";
   results.replaceChildren();
   reviewNotice.hidden = true;
   resetConversation();
@@ -346,7 +385,8 @@ generateButton.addEventListener("click", async () => {
     conversationId = data.conversation_id || null;
     followupPanel.hidden = conversationId === null || reviewNotice.hidden;
     resultActions.hidden = followupPanel.hidden;
-    message.textContent = "완료";
+    message.textContent = "조성표 완료. 후보 1 해설을 작성합니다.";
+    wireExplanations();
   } catch (error) {
     message.textContent = describeError(error);
     updateEmptyState();
@@ -378,7 +418,7 @@ followupButton.addEventListener("click", async () => {
     message.textContent = describeError(new Error("CONVERSATION-001"));
     return;
   }
-  message.textContent = "후속 질문 처리 중… 요청을 고치는 경우 조성표와 해설을 다시 만듭니다.";
+  message.textContent = "후속 질문 처리 중… 요청을 고치는 경우 조성표를 다시 만들고 해설은 뒤이어 붙습니다.";
   followupButton.disabled = true;
   followupButton.ariaBusy = "true";
   try {
@@ -393,6 +433,7 @@ followupButton.addEventListener("click", async () => {
     if (data.action === "refine" && data.changed) {
       showResult(data);
       saveStatus.textContent = "";   // 표가 바뀌었으니 저장본과 다르다
+      wireExplanations();            // 조성이 바뀌었으니 후보 1 해설을 다시 쓴다
     }
     appendFollowupLog(data.answer_html || "");
     followupQuestion.value = "";
@@ -517,6 +558,7 @@ async function openResult(id) {
     const data = await jsonRequest(`/api/results/${id}`);
     resetConversation();
     showResult(data);
+    wireExplanations({autoFirst: false});   // 대화가 없어 버튼은 숨긴다
     showTurns(data.turns);
     followupPanel.hidden = false;
     setFollowupEnabled(false);        // 읽기 전용 — '이어서 질문'을 눌러야 대화가 열린다
@@ -538,6 +580,7 @@ async function resumeResult(id) {
     showResult(data);
     showTurns(data.turns);
     conversationId = data.conversation_id;
+    wireExplanations({autoFirst: false});   // 저장된 해설은 이미 있고, 없는 후보만 버튼으로
     followupPanel.hidden = false;
     resultActions.hidden = false;
     saveStatus.textContent = `저장본 ${id} 에서 이어서 질문합니다. 질의응답은 그 폴더에도 기록됩니다.`;

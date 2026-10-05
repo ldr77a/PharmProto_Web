@@ -32,6 +32,7 @@ class Conversation:
     downloads: list[dict]
     turns: list[dict] = field(default_factory=list)   # {"role", "kind": question|answer|refine, "text", "html"}
     result_id: str | None = None                      # 저장본과 연결돼 있으면 그 id(저장 뒤 요청이 바뀌면 None)
+    meta: dict = field(default_factory=dict)          # 인쇄 머리글(질문·시각·DB·모델). 해설이 나중에 붙을 때 html 재생성용
 
     def add_turn(self, role: str, kind: str, text: str, html: str = "") -> None:
         """html 은 화면에 그린 카드(답변·수정 기록) — 저장본과 '열기'가 그대로 다시 보여 준다."""

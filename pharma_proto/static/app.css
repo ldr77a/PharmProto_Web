@@ -385,3 +385,7 @@ button.g.fail:hover:not(:disabled), button.badge.bad:hover:not(:disabled) { back
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+
+.explain-slot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.explain-status { font-size: 12px; opacity: .8; }
+@media print { .explain-slot { display: none; } }

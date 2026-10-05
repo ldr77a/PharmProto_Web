@@ -45,8 +45,8 @@ EXPLAIN_INSTRUCTION = (
     "7. disclaimer 에 이 해설의 한계를 한 문장으로 적는다.\n"
     "8. 분량 제한(응답 시간): summary 는 세 문장 이내, ingredient_notes 는 성분당 한두 문장, "
     "risks·process_notes·verification_checklist·alternatives 는 각 3개 이하. "
-    "후보 1 만 전체 항목을 쓰고, 후보 2 이후는 summary(후보 1 과의 차이)와 alternatives 만 쓰며 "
-    "ingredient_notes 는 후보 1 에 없는 성분만 적는다."
+    "입력에 후보가 하나면 그 후보를 전체 항목으로 쓴다. 여럿이면 첫 후보만 전체 항목, 나머지는 summary(첫 후보와의 차이)와 "
+    "alternatives 만 쓰고 ingredient_notes 는 첫 후보에 없는 성분만 적는다."
 )
 
 FOLLOWUP_INSTRUCTION = (

@@ -122,17 +122,34 @@ function browserHarness({generatePayload, followupPayloads = [], routes = {}} = 
         }),
       );
       this.hasCard = value.includes('class="card"');
+      // 해설 자리: data-explain-index 마다 슬롯(버튼·상태·innerHTML) 가짜를 만든다
+      this.explainSlots = [...value.matchAll(/class='explain-slot' data-explain-index='(\d+)'/g)].map(
+        (match) => {
+          const button = fakeElement({disabled: false, dataset: {explainIndex: match[1]}});
+          const status = fakeElement();
+          const slot = fakeElement({innerHTML: "", dataset: {explainIndex: match[1]}, button, status});
+          slot.querySelector = (selector) => (selector === ".explain-btn" ? button : selector === ".explain-status" ? status : null);
+          return slot;
+        },
+      );
+      this.headSlot = value.includes("id='explain-head-slot'") ? fakeElement({innerHTML: ""}) : null;
     },
   });
   results.replaceChildren = function replaceChildren() {
     this.innerHTML = "";
   };
   results.querySelectorAll = (selector) => (
-    selector === ".download-xlsx" ? (results.buttons || []) : []
+    selector === ".download-xlsx" ? (results.buttons || [])
+      : selector === ".explain-btn" ? (results.explainSlots || []).map((slot) => slot.button)
+        : []
   );
-  results.querySelector = (selector) => (
-    selector === ".card" && results.hasCard ? {} : null
-  );
+  results.querySelector = (selector) => {
+    if (selector === ".card") return results.hasCard ? {} : null;
+    if (selector === "#explain-head-slot") return results.headSlot;
+    const slotMatch = /^\.explain-slot\[data-explain-index="(\d+)"\]$/.exec(selector);
+    if (slotMatch) return (results.explainSlots || []).find((slot) => slot.dataset.explainIndex === slotMatch[1]) || null;
+    return null;
+  };
 
   const body = {
     children: [],
@@ -485,4 +502,48 @@ test("키가 없는 서버에서는 '저장된 키로 계속' 안내가 숨어 �
   const harness = browserHarness();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(harness.elements["#resume-key"].hidden, true);
+});
+
+
+test("조성표가 뜬 뒤 후보 1 해설만 자동으로 받고, 다른 후보는 버튼으로 받는다", async () => {
+  const explainHtml = "<div class='explain-slot' data-explain-index='1'><button class='explain-btn' data-explain-index='1'>해설 보기</button><span class='explain-status'></span></div>"
+    + "<div class='explain-slot' data-explain-index='2'><button class='explain-btn' data-explain-index='2'>해설 보기</button><span class='explain-status'></span></div>";
+  const explainCalls = [];
+  const harness = browserHarness({
+    generatePayload: {
+      html: `<div id='explain-head-slot'></div><div class="card">표</div>${explainHtml}`,
+      downloads: [],
+      conversation_id: "c".repeat(32),
+    },
+    routes: {
+      "POST /api/explain": (options) => {
+        const body = JSON.parse(options.body);
+        explainCalls.push(body.candidate_idx);
+        return {
+          candidate_idx: body.candidate_idx,
+          html: `<details class='explain' open>해설 ${body.candidate_idx}</details>`,
+          header_html: body.candidate_idx === 1 ? "<div class='card explain-head'>API 프로파일</div>" : "",
+        };
+      },
+    },
+  });
+  harness.elements["#api-key"].value = "test-key";
+  await harness.elements["#save-key"].dispatch("click");
+
+  await harness.elements["#generate"].dispatch("click");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(explainCalls, [1]);                                         // 후보 1만 자동
+  const [slot1, slot2] = harness.results.explainSlots;
+  assert.equal(slot1.innerHTML, "<details class='explain' open>해설 1</details>");
+  assert.equal(harness.results.headSlot.innerHTML, "<div class='card explain-head'>API 프로파일</div>");
+  assert.equal(slot2.innerHTML, "");
+  assert.equal(slot2.button.disabled, false);
+
+  await slot2.button.dispatch("click");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(explainCalls, [1, 2]);
+  assert.equal(slot2.innerHTML, "<details class='explain' open>해설 2</details>");
+  assert.equal(harness.results.headSlot.innerHTML, "<div class='card explain-head'>API 프로파일</div>");  // 머리글은 한 번만
 });

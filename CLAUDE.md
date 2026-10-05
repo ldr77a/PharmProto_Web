@@ -41,8 +41,10 @@ The LLM parses the request (`LLMService.parse`) and, after the deterministic gen
 (`LLMService.explain`). `generation/explanation.py` builds the payload (components with provenance, gate results,
 HPE6 evidence, co-usage counts with the requested API); the model returns `FormulationExplanation`
 (`llm/schema.py`) and every sentence carries `basis`: `evidence` (cites supplied data, `refs`) or `general`
-(model knowledge, rendered as "일반 지식·검증 필요"). Numbers are never changed by the model. A failed explain
-call keeps the table and shows `해설 생성 실패 (<code>)`. All three providers use structured outputs; the Claude
+(model knowledge, rendered as "일반 지식·검증 필요"). Numbers are never changed by the model. The explanation is
+deferred: `/api/generate` returns the table with `explain-slot` placeholders and `app.js` calls
+`POST /api/explain` per candidate (candidate 1 automatically, others on click); the server merges each answer into
+`conversation.explanation` and re-renders `conversation.html`. A failed call shows `해설 생성 실패 (<code>)` in the slot. All three providers use structured outputs; the Claude
 path uses `messages.parse` because current Claude models reject forced `tool_choice`.
 
 ## Follow-up layer (third LLM call)

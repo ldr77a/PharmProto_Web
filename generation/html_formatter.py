@@ -279,6 +279,15 @@ def followup_turn_html(question: str, changes, note: str = "") -> str:
     )
 
 
+def explanation_slot_html(candidate_idx: int) -> str:
+    """해설이 아직 없는 후보의 자리. app.js 가 /api/explain 응답으로 채운다(후보 1은 자동, 나머지는 버튼)."""
+    return (
+        f"<div class='explain-slot' data-explain-index='{candidate_idx}'>"
+        f"<button type='button' class='explain-btn secondary compact' data-explain-index='{candidate_idx}'>해설 보기</button>"
+        "<span class='explain-status'></span></div>"
+    )
+
+
 def explanation_header_html(explanation) -> str:
     if explanation is None:
         return ""
@@ -332,7 +341,7 @@ def candidate_html(cand, explanation=None) -> str:
     all_notes = warn_notes + selection_notes
     notes_html = f"<ul class='notes'>{all_notes}</ul>" if all_notes else ""
     evidence_html = _evidence_html(cand)
-    explain_html = explanation_html(explanation)
+    explain_html = explanation_html(explanation) or explanation_slot_html(cand.idx)
 
     # 카드는 접이식: 머리줄(제목·상태·핵심 부형제·총중량)을 누르면 표·근거·해설이 접히고 펼쳐진다.
     # 인쇄 때는 app.js 의 beforeprint 가 접힌 것을 모두 펼친다.
@@ -504,5 +513,7 @@ def results_html(spec, candidates, explanation=None, explanation_error: str | No
         print_header_html(meta)
         + f"<div class='meta'>{meta_line} · 후보 {len(candidates)}개</div>"
         + request_summary_html(spec, candidates)
-        + notice + explanation_header_html(explanation) + cards
+        + notice
+        + f"<div id='explain-head-slot'>{explanation_header_html(explanation)}</div>"
+        + cards
     )

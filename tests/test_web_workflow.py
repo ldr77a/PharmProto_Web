@@ -423,6 +423,8 @@ def test_followup_refine_regenerates_from_the_revised_request(app_factory, monke
     assert first.status_code == 200
     conversation_id = first.get_json()["conversation_id"]
     assert len(conversation_id) == 32 and first.get_json()["html"].count("조성 후보 ") == 2
+    assert client.post("/api/explain", json={"provider": "claude", "tier": "normal",
+                                             "conversation_id": conversation_id, "candidate_idx": 1}).status_code == 200
 
     second = client.post("/api/followup", json={"provider": "claude", "tier": "normal",
                                                 "conversation_id": conversation_id,
@@ -441,7 +443,7 @@ def test_followup_refine_regenerates_from_the_revised_request(app_factory, monke
     assert len(data["downloads"]) == 1
     assert "후보 수: 2 → 1" in data["answer_html"] and "총중량: 자동 → 650 mg" in data["answer_html"]
     assert "후보 1개, 총중량 650 mg 으로." in data["answer_html"]
-    assert calls == [1, 1] and service.explain_calls == 2
+    assert calls == [1, 1] and service.explain_calls == 1      # 해설은 /api/explain 1회뿐, refine 은 해설을 부르지 않는다
     payload = service.followup_payloads[0]
     assert payload["previous_request"]["apis"][0]["name"] == "acetaminophen"
     assert payload["question"] == "후보 1개, 총중량 650 mg 으로"
@@ -555,6 +557,8 @@ def test_save_list_open_resume_and_delete_round_trip(app_factory, monkeypatch, t
     client.post("/api/key", json={"provider": "claude", "api_key": "test-key"})
     first = client.post("/api/generate", json={"provider": "claude", "tier": "normal",
                                                "question": "아세트아미노펜 500 mg 정제"}).get_json()
+    assert client.post("/api/explain", json={"provider": "claude", "tier": "normal",
+                                             "conversation_id": first["conversation_id"], "candidate_idx": 1}).status_code == 200
 
     saved = client.post("/api/results", json={"conversation_id": first["conversation_id"]})
 
@@ -570,7 +574,8 @@ def test_save_list_open_resume_and_delete_round_trip(app_factory, monkeypatch, t
     assert listing[0]["api_names"] == ["acetaminophen"] and listing[0]["n_candidates"] == 1
 
     opened = client.get(f"/api/results/{result_id}").get_json()
-    assert opened["html"] == first["html"] and opened["resumable"] is True
+    assert opened["html"] != first["html"] and "검토용." in opened["html"]   # 저장본은 해설이 붙은 html
+    assert opened["resumable"] is True
     assert opened["question"] == "아세트아미노펜 500 mg 정제" and opened["turns"][0]["kind"] == "question"
     assert str(tmp_path) not in json.dumps(opened) and str(tmp_path) not in json.dumps(listing)
     assert str(tmp_path) not in saved.get_json()["location"]          # 응답에 실제 경로 없음
@@ -707,7 +712,8 @@ def _explanation():
     })
 
 
-def test_generate_renders_explanation_with_basis_badges(app_factory, monkeypatch) -> None:
+def test_generate_renders_slots_and_explain_fills_candidate(app_factory, monkeypatch) -> None:
+    """표는 LLM 해설 없이 바로 나오고, /api/explain 이 후보 하나씩 채운다(근거/일반지식 배지)."""
     spec = SimpleNamespace(apis=[SimpleNamespace(name="Acetaminophen")], dosage_form="tablet",
                            process="direct compression", profile_id="immediate_release_tablet")
     monkeypatch.setattr(app_module, "run_generation",
@@ -720,18 +726,38 @@ def test_generate_renders_explanation_with_basis_badges(app_factory, monkeypatch
                                                   "question": "아세트아미노펜 500 mg 정제"})
 
     assert response.status_code == 200
-    html = response.get_json()["html"]
-    assert html.count("<details class='explain' open>") == 1          # 해설이 있는 후보 1만
-    assert "class='basis ev'" in html and "class='basis gen'" in html
-    assert "data-help='basis:evidence'" in html and "data-help='basis:general'" in html
-    assert "KG 역할별 범위 n=2034" in html and "API 프로파일" in html and "검토용." in html
+    data = response.get_json()
+    html = data["html"]
+    assert service.explain_payloads == []                                  # 생성은 해설을 부르지 않는다
+    assert html.count("<div class='explain-slot' data-explain-index=") == 2
+    assert "<details class='explain' open>" not in html and "<div id='explain-head-slot'></div>" in html
+
+    explained = client.post("/api/explain", json={"provider": "claude", "tier": "normal",
+                                                  "conversation_id": data["conversation_id"], "candidate_idx": 2})
+
+    assert explained.status_code == 200
+    body = explained.get_json()
+    assert body["candidate_idx"] == 2 and "class='basis ev'" in body["html"] and "class='basis gen'" in body["html"]
+    assert "KG 역할별 범위 n=2034" in body["html"]
+    assert "API 프로파일" in body["header_html"] and "검토용." in body["header_html"]   # 첫 해설에만 머리글
     payload = service.explain_payloads[0]
-    assert payload["request"]["apis"][0]["name"] == "Acetaminophen"
-    assert [c["candidate_idx"] for c in payload["candidates"]] == [1, 2]
+    assert [c["candidate_idx"] for c in payload["candidates"]] == [2]           # 후보 하나만 보낸다
     assert payload["candidates"][0]["components"][0]["ingredient"] == "Acetaminophen"
 
+    again = client.post("/api/explain", json={"provider": "claude", "tier": "normal",
+                                              "conversation_id": data["conversation_id"], "candidate_idx": 1})
+    assert again.get_json()["header_html"] == ""                                   # 두 번째부터는 머리글 없음
 
-def test_generate_keeps_table_when_explanation_fails(app_factory, monkeypatch, tmp_path: Path) -> None:
+    saved = client.post("/api/results", json={"conversation_id": data["conversation_id"]}).get_json()
+    opened = client.get(f"/api/results/{saved['result_id']}").get_json()
+    assert opened["html"].count("<details class='explain' open>") == 2             # 저장본은 채워진 해설을 가진다
+    assert "explain-slot" not in opened["html"]
+    missing = client.post("/api/explain", json={"provider": "claude", "tier": "normal",
+                                                "conversation_id": data["conversation_id"], "candidate_idx": 9})
+    assert missing.status_code == 400 and missing.get_json() == {"error": "REQUEST-001"}
+
+
+def test_explain_failure_returns_code_and_leaves_table(app_factory, monkeypatch, tmp_path: Path) -> None:
     spec = SimpleNamespace(apis=[SimpleNamespace(name="Acetaminophen")], dosage_form="tablet",
                            process="", profile_id="immediate_release_tablet")
     monkeypatch.setattr(app_module, "run_generation",
@@ -739,12 +765,13 @@ def test_generate_keeps_table_when_explanation_fails(app_factory, monkeypatch, t
     failure = LLMFailure("LLM-RATE-001", True, provider_code=429)
     client = app_factory(llm_service=_FakeLLMService(spec, explain_failure=failure)).test_client()
     assert client.post("/api/key", json={"provider": "openai", "api_key": "test-key"}).status_code == 200
+    data = client.post("/api/generate", json={"provider": "openai", "tier": "normal",
+                                              "question": "아세트아미노펜 500 mg 정제"}).get_json()
+    assert 'class="download-xlsx ' in data["html"] and "explain-slot" in data["html"]
 
-    response = client.post("/api/generate", json={"provider": "openai", "tier": "normal",
-                                                  "question": "아세트아미노펜 500 mg 정제"})
+    response = client.post("/api/explain", json={"provider": "openai", "tier": "normal",
+                                                 "conversation_id": data["conversation_id"], "candidate_idx": 1})
 
-    assert response.status_code == 200
-    html = response.get_json()["html"]
-    assert "해설 생성 실패 (LLM-RATE-001)" in html and 'class="download-xlsx ' in html
+    assert response.status_code == 502 and response.get_json() == {"error": "LLM-RATE-001"}
     rows = (tmp_path / "PhramaProto" / "logs" / "app.log").read_text(encoding="utf-8")
-    assert '"LLM-RATE-001"' in rows.splitlines()[-1] or "LLM-RATE-001" in rows
+    assert "LLM-RATE-001" in rows.splitlines()[-1]

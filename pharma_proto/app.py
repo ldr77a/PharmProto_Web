@@ -18,6 +18,8 @@ from generation.explanation import build_explanation_payload, build_followup_pay
 from generation.generation_loop import run_generation
 from generation.help_text import GATES, help_entries
 from generation.html_formatter import (
+    explanation_header_html,
+    explanation_html,
     followup_answer_html,
     followup_turn_html,
     results_html,
@@ -30,6 +32,7 @@ from pharma_proto.errors import (
     APP_START_ERROR,
     CONVERSATION_ERROR,
     LLM_KEY_ERROR,
+    LLM_RESPONSE_ERROR,
     PREFERENCES_IO_ERROR,
     REQUEST_ERROR,
     REQUEST_FORM_ERROR,
@@ -68,6 +71,15 @@ class _GenerateRequest(BaseModel):
     provider: Literal["openai", "gemini", "claude"]
     tier: Literal["cheap", "normal", "good"] = "normal"
     question: str = Field(min_length=1, max_length=4000)
+
+
+class _ExplainRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["openai", "gemini", "claude"]
+    tier: Literal["cheap", "normal", "good"] = "normal"
+    conversation_id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
+    candidate_idx: int = Field(ge=1, le=20)
 
 
 class _FollowUpRequest(BaseModel):
@@ -267,29 +279,6 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
         )
         return candidates
 
-    def _explain_or_none(provider: str, tier: str, api_key: str, model: str, spec, candidates):
-        """해설층: 숫자는 DB 가 정했고 LLM 은 해석만 한다. 실패해도 표는 그대로 돌려준다."""
-        explain = getattr(llm_service, "explain", None)
-        if not candidates or not callable(explain):
-            return None, None
-        try:
-            explanation = explain(
-                provider,
-                tier,
-                api_key,
-                build_explanation_payload(spec, candidates, repository),
-            )
-        except LLMFailure as failure:
-            _record_llm_failure(failure, provider, model)
-            return None, failure.code
-        diagnostics.record(
-            event="explanation_complete",
-            provider=provider,
-            model=model,
-            snapshot_id=_snapshot_id(),
-        )
-        return explanation, None
-
     def _downloads(candidates) -> list[dict[str, Any]]:
         return [
             {
@@ -305,11 +294,9 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
     def _render(
         provider: str, tier: str, api_key: str, model: str, spec, *, question: str = ""
     ) -> dict[str, Any]:
-        """생성 → 해설 → HTML·엑셀. generate 와 followup(refine)·resume 가 같은 경로를 탄다."""
+        """생성 → HTML·엑셀. 해설은 여기서 부르지 않는다(표를 먼저 보여 주고 /api/explain 이 후보별로 붙인다)."""
         candidates = _generate_candidates(spec, provider=provider, model=model)
-        explanation, explanation_error = _explain_or_none(
-            provider, tier, api_key, model, spec, candidates
-        )
+        explanation, explanation_error = None, None
         meta = {   # 인쇄·저장본 머리글: 무엇을, 언제, 어느 DB·모델로 만들었는지
             "question": question,
             "generated_at": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M"),
@@ -323,7 +310,61 @@ def create_app(overrides: Mapping[str, Any] | None = None) -> Flask:
             "explanation_error": explanation_error,
             "html": results_html(spec, candidates, explanation, explanation_error, meta=meta),
             "downloads": _downloads(candidates),
+            "meta": meta,
         }
+
+    @app.post("/api/explain")
+    def explain_candidate():
+        """후보 하나의 해설(2차 LLM 호출). 표는 이미 떠 있고, 이 응답을 카드 안 자리에 끼운다.
+
+        대화 상태에 누적(explanation.candidates)해서 저장·후속 질문·재개가 같은 해설을 본다.
+        """
+        body = _parse_body(_ExplainRequest)
+        api_key = key_store.get(body.provider)
+        if api_key is None:
+            raise AppError(LLM_KEY_ERROR, 400)
+        conversation = conversations.get(body.conversation_id)
+        if conversation is None:
+            raise AppError(CONVERSATION_ERROR, 404)
+        candidate = next((c for c in conversation.candidates if c.idx == body.candidate_idx), None)
+        if candidate is None:
+            raise AppError(REQUEST_ERROR, 400)
+        explain = getattr(llm_service, "explain", None)
+        if not callable(explain):
+            raise AppError(REQUEST_ERROR, 400)
+        model = model_for(body.provider, body.tier)
+        try:
+            partial = explain(
+                body.provider, body.tier, api_key,
+                build_explanation_payload(conversation.spec, [candidate], repository),
+            )
+        except LLMFailure as failure:
+            return _llm_failure(failure, body.provider, model)
+        diagnostics.record(
+            event="explanation_complete", provider=body.provider, model=model, snapshot_id=_snapshot_id(),
+        )
+        if not partial.candidates:
+            raise AppError(LLM_RESPONSE_ERROR, 502)
+        entry = partial.candidates[0].model_copy(update={"candidate_idx": body.candidate_idx})
+        first = conversation.explanation is None
+        if first:
+            conversation.explanation = partial.model_copy(update={"candidates": [entry]})
+        else:
+            kept = [c for c in conversation.explanation.candidates if c.candidate_idx != entry.candidate_idx]
+            conversation.explanation = conversation.explanation.model_copy(
+                update={"candidates": sorted([*kept, entry], key=lambda c: c.candidate_idx)}
+            )
+        conversation.html = results_html(
+            conversation.spec, conversation.candidates, conversation.explanation, None,
+            meta=conversation.meta or None,
+        )
+        conversations.replace(conversation)
+        return jsonify(
+            conversation_id=conversation.conversation_id,
+            candidate_idx=body.candidate_idx,
+            html=explanation_html(entry),
+            header_html=explanation_header_html(conversation.explanation) if first else "",
+        )
 
     @app.post("/api/generate")
     def generate():
