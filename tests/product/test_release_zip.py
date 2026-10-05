@@ -66,7 +66,7 @@ def test_release_zip_contains_only_runtime_allowlist(tmp_path):
             "pyproject.toml",
             "uv.lock",
             "function_seed.json",
-            "README-RESEARCHER.md",
+            "README.md",
             "tools/bootstrap-runtime.ps1",
             "tools/uv-windows-x64.sha256",
             "release-data/knowledge.sqlite",

@@ -75,8 +75,8 @@ def test_checked_in_baseline_contains_runtime_and_reference_assets():
         ".db",
     ],
 )
-# 앱 저장소 정책: release-data/knowledge.sqlite 는 git LFS 로 추적하고 사용자 매뉴얼 PDF 도 추적한다.
-# 그래서 DB 저장소에서 금지하던 ".sqlite", ".pdf" 는 여기서는 검사하지 않는다.
+# 앱 저장소 정책: release-data/knowledge.sqlite 는 git LFS 로 추적한다.
+# 그래서 DB 저장소에서 금지하던 ".sqlite" 는 여기서는 검사하지 않는다(사용자 매뉴얼은 README.md 로 옮겼다).
 def test_checked_in_baseline_excludes_generated_sensitive_and_database_files(forbidden):
     assert not any(forbidden in f"/{path.lower()}" for path in _tracked_files())
 

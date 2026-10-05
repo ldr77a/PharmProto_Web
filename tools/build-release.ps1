@@ -62,7 +62,7 @@ try {
         "pyproject.toml",
         "uv.lock",
         "function_seed.json",
-        "README-RESEARCHER.md"
+        "README.md"
     )
     foreach ($relative in $rootFiles) {
         $source = Join-Path $ProjectRoot $relative

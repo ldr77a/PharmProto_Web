@@ -17,8 +17,8 @@ DB 저장소(`../Pharma_Proto`)에서 작업하던 세션의 메모리는 폴더
   → **144 passed, 2 skipped**. 제외한 32개는 msvcrt·powershell 이 필요한 Windows 전용. JS 는 `node --test tests/test_app_js.mjs` → **11 passed**.
 - 린트 `uv run ruff check .` 는 예전 코드의 스타일 경고 28건이 남아 있다(동작 무관). 새로 손댄 파일만 깨끗하게 유지한다.
 - 릴리스 허용목록(`tools/build-release.ps1 $runtimePackageFiles`) 감사: 목록 54개 모두 존재, 앱이 import 하는 저장소 모듈 41개와 글꼴·svg 전부 포함(2026-10-05 확인).
-  ZIP 에는 허용목록 + `start.bat`·`pyproject.toml`·`uv.lock`·`function_seed.json`·`README-RESEARCHER.md` + `tools/bootstrap-runtime.ps1`·`uv-windows-x64.sha256` + `release-data/` 만 들어간다.
-  `docs/`, `tests/`, `CLAUDE.md`, 사용자 매뉴얼은 들어가지 않는다.
+  ZIP 에는 허용목록 + `start.bat`·`pyproject.toml`·`uv.lock`·`function_seed.json`·`README.md`(빠른 시작 요약 + 사용자 매뉴얼, 저장소 공식 README) + `tools/bootstrap-runtime.ps1`·`uv-windows-x64.sha256` + `release-data/` 만 들어간다.
+  `docs/`, `tests/`, `CLAUDE.md` 는 들어가지 않는다. `CLAUDE.md` 는 git 에서 빼고 `.gitignore` 에 넣었다(로컬에만 둔다).
 - 개발용 실행(macOS): `LOCALAPPDATA="$HOME/Library/Application Support" uv run python -c "from waitress import serve; from pharma_proto.app import create_app; serve(create_app(), host='127.0.0.1', port=8765, threads=4)"`.
   템플릿은 서버가 처음 한 번만 읽으므로 `index.html` 을 바꾸면 재시작해야 한다(정적 JS·CSS 는 바로 반영). 재시작하면 메모리의 키가 사라진다.
 - 정식 실행은 Windows `start.bat`. **0.2.0 릴리스 ZIP 은 아직 만들지 않았다.** 빌드 스크립트는 `.venv\Scripts\python.exe` 와 PowerShell 전용 cmdlet 을 쓰므로 Windows 에서만 돈다:
