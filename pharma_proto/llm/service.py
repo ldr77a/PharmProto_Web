@@ -46,7 +46,10 @@ EXPLAIN_INSTRUCTION = (
     "8. 분량 제한(응답 시간): summary 는 세 문장 이내, ingredient_notes 는 성분당 한두 문장, "
     "risks·process_notes·verification_checklist·alternatives 는 각 3개 이하. "
     "입력에 후보가 하나면 그 후보를 전체 항목으로 쓴다. 여럿이면 첫 후보만 전체 항목, 나머지는 summary(첫 후보와의 차이)와 "
-    "alternatives 만 쓰고 ingredient_notes 는 첫 후보에 없는 성분만 적는다."
+    "alternatives 만 쓰고 ingredient_notes 는 첫 후보에 없는 성분만 적는다.\n"
+    "9. 표기: 조사와 어미는 앞말에 붙여 쓴다(예: 'status는'이 아니라 '상태는', '62.89%를', 'pass이다'가 아니라 '통과이다'). "
+    "영문·숫자 뒤에서도 띄어쓰지 않는다. 게이트 상태는 한국어로 쓴다(pass→통과, warning→경고, fail→실패, unresolved→미해결). "
+    "성분명·단위·꼬리표(KG, HPE6, p95 등)만 영문을 유지한다."
 )
 
 FOLLOWUP_INSTRUCTION = (

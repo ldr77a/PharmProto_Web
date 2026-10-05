@@ -192,6 +192,25 @@ def _evidence_html(cand) -> str:
     )
 
 
+_KO_PARTICLES = ("은", "는", "이다", "이며", "이고", "이라면", "이라고", "이란", "이라", "이면", "인", "일", "임", "이", "가",
+                 "을", "를", "의", "에서", "에게", "에", "으로", "로", "와", "과", "도", "라서", "였다", "입니다", "까지", "부터",
+                 "보다", "처럼", "마다", "만")
+_PARTICLE_GAP = re.compile(
+    r"(?<=[A-Za-z0-9%)\]])\s+(?=(?:" + "|".join(_KO_PARTICLES) + r")(?=[\s,.;:!?)\]]|$))"
+)
+_STATUS_WORDS = {"pass": "통과", "warning": "경고", "fail": "실패", "unresolved": "미해결"}
+_STATUS_RE = re.compile(r"(?<![A-Za-z_])(pass|warning|fail|unresolved)(?![A-Za-z_])")   # \b 는 한글을 단어로 봐서 못 끊는다
+
+
+def tidy_ko(text: str) -> str:
+    """LLM 문장의 표기 정리: 'status 는' → 'status는', '62.89% 를' → '62.89%를', 'pass 이다' → '통과이다'.
+
+    모델이 영문 토큰 뒤 조사를 띄어 쓰는 습관을 화면에서 바로잡는다. 성분명·수치는 건드리지 않는다.
+    """
+    cleaned = _PARTICLE_GAP.sub("", text or "")
+    return _STATUS_RE.sub(lambda m: _STATUS_WORDS[m.group(1)], cleaned)
+
+
 def _basis_badge(basis: str) -> str:
     if basis == "evidence":
         return _help_button("basis:evidence", "basis ev", "근거", "입력된 DB·HPE6 근거를 인용한 문장")
@@ -211,7 +230,7 @@ def _items_html(title: str, items) -> str:
     if not items:
         return ""
     lis = "".join(
-        f"<li>{_basis_badge(item.basis)} {html.escape(item.text)} {_refs_html(item.refs)}</li>"
+        f"<li>{_basis_badge(item.basis)} {html.escape(tidy_ko(item.text))} {_refs_html(item.refs)}</li>"
         for item in items
     )
     return f"<div class='explain-section'><h5>{html.escape(title)}</h5><ul>{lis}</ul></div>"
@@ -223,13 +242,13 @@ def explanation_html(expl) -> str:
         return ""
     parts = []
     if expl.summary:
-        parts.append(f"<p class='explain-summary'>{html.escape(expl.summary)}</p>")
+        parts.append(f"<p class='explain-summary'>{html.escape(tidy_ko(expl.summary))}</p>")
     if expl.ingredient_notes:
         rows = "".join(
             "<tr>"
             f"<td class='ing'>{html.escape(note.ingredient)}</td>"
-            f"<td>{_basis_badge(note.basis)} {html.escape(note.rationale)} {_refs_html(note.refs)}"
-            + (f"<div class='caution'>주의: {html.escape(note.caution)}</div>" if note.caution else "")
+            f"<td>{_basis_badge(note.basis)} {html.escape(tidy_ko(note.rationale))} {_refs_html(note.refs)}"
+            + (f"<div class='caution'>주의: {html.escape(tidy_ko(note.caution))}</div>" if note.caution else "")
             + "</td></tr>"
             for note in expl.ingredient_notes
         )
@@ -293,7 +312,7 @@ def explanation_header_html(explanation) -> str:
         return ""
     parts = [_items_html("API 프로파일", explanation.api_profile)]
     if explanation.disclaimer:
-        parts.append(f"<p class='explain-disclaimer'>{html.escape(explanation.disclaimer)}</p>")
+        parts.append(f"<p class='explain-disclaimer'>{html.escape(tidy_ko(explanation.disclaimer))}</p>")
     body = "".join(parts)
     return f"<div class='card explain-head'>{body}</div>" if body else ""
 

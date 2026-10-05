@@ -775,3 +775,16 @@ def test_explain_failure_returns_code_and_leaves_table(app_factory, monkeypatch,
     assert response.status_code == 502 and response.get_json() == {"error": "LLM-RATE-001"}
     rows = (tmp_path / "PhramaProto" / "logs" / "app.log").read_text(encoding="utf-8")
     assert "LLM-RATE-001" in rows.splitlines()[-1]
+
+
+def test_tidy_ko_joins_particles_and_translates_gate_words():
+    from generation.html_formatter import tidy_ko
+
+    assert tidy_ko("게이트1 사용량 범위가 fail 이고 status 는 unresolved 이다.") == "게이트1 사용량 범위가 실패이고 status는 미해결이다."
+    assert tidy_ko("KG p95=62.89% 를 넘은 점이며 Microcrystalline cellulose 86.006 mg(86.006%)이 원인") == \
+        "KG p95=62.89%를 넘은 점이며 Microcrystalline cellulose 86.006 mg(86.006%)이 원인"
+    assert tidy_ko("Hypromellose 는 결합제로 2.56% 이다") == "Hypromellose는 결합제로 2.56%이다"
+    assert tidy_ko("talc 와 magnesium stearate 를 쓴다") == "talc와 magnesium stearate를 쓴다"
+    assert tidy_ko("Croscarmellose sodium 2.9 mg 이 HPE6 범위 안") == "Croscarmellose sodium 2.9 mg이 HPE6 범위 안"
+    assert tidy_ko("n=921 인 범위") == "n=921인 범위"
+    assert tidy_ko("Lactose is a diluent") == "Lactose is a diluent"      # 영문 문장은 건드리지 않는다

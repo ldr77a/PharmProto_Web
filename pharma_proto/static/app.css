@@ -255,7 +255,7 @@ details { margin-top: 14px; }
 .explain-section h5 { margin: 0 0 6px; color: var(--primary); font-size: 13px; letter-spacing: .02em; }
 .explain-section ul { margin: 0; padding-left: 18px; line-height: 1.7; }
 .explain-section li + li { margin-top: 4px; }
-.explain-summary { margin: 10px 0 0; line-height: 1.7; max-width: 72ch; }
+.explain-summary { margin: 10px 0 0; line-height: 1.7; }
 .explain-table td { vertical-align: top; }
 .explain-table .ing { width: 28%; }
 .explain-head { padding: 16px 20px; }
@@ -389,3 +389,7 @@ button.g.fail:hover:not(:disabled), button.badge.bad:hover:not(:disabled) { back
 .explain-slot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .explain-status { font-size: 12px; opacity: .8; }
 @media print { .explain-slot { display: none; } }
+
+/* 해설 본문: 양끝 정렬 + 한국어 단어 중간에서 줄을 끊지 않는다(keep-all) */
+.explain-summary, .explain-section li, .explain-table td, .explain-disclaimer, .caution { text-align: justify; text-justify: inter-word; word-break: keep-all; overflow-wrap: anywhere; }
+.explain-text-justify { }
