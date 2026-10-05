@@ -29,7 +29,11 @@ SYSTEM_INSTRUCTION = (
     "weight in target_total_mg. Never invent amounts; leave a field empty when the user did not "
     "state it. Include every excipient the user names, including those of an existing formulation "
     "that is being revised, each under its stated role, and keep the order in which they were "
-    "mentioned. Put film-coating ingredients under additional_roles with role 'film coating'."
+    "mentioned. Put film-coating ingredients under additional_roles with role 'film coating'. "
+    "When the user wants an ingredient removed or replaced (for example 'use microcrystalline "
+    "cellulose instead of povidone', 'replace lactose with another diluent', 'povidone is only for "
+    "wet granulation and we are switching to direct compression'), put that ingredient in `excluded` "
+    "and do not list it under any role; list the replacement under its role instead."
 )
 
 EXPLAIN_INSTRUCTION = (
@@ -158,6 +162,7 @@ def _gemini_response_schema() -> dict[str, Any]:
                     "required": ["ingredient"],
                 },
             },
+            "excluded": {"type": "ARRAY", "items": {"type": "STRING"}},
             "process": {"type": "STRING"},
             "release_profile": {"type": "STRING"},
             "n_candidates": {"type": "INTEGER"},

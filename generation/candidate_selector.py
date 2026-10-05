@@ -95,6 +95,15 @@ def complete_excipient_choices(
     )
     spec.profile_id = profile.profile_id
     excluded = {api.name.casefold() for api in spec.apis}
+    user_excluded = {str(name).casefold() for name in getattr(spec, "excluded", []) or []}
+    excluded |= user_excluded
+    if user_excluded:   # 사용자가 뺀 성분은 역할 목록에서도 지운다(DB 후보·검토 기본값은 아래 _dedupe 가 거른다)
+        for role, names in list(spec.excipient_choices.items()):
+            kept = [n for n in names if n.casefold() not in user_excluded]
+            if kept:
+                spec.excipient_choices[role] = kept
+            else:
+                spec.excipient_choices.pop(role)
     source_map = getattr(spec, "selection_sources", None)
     if source_map is None:
         source_map = {}

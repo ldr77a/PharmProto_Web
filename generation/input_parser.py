@@ -38,6 +38,8 @@ class FormulationSpec:
     selection_sources: dict[str, str] = field(default_factory=dict)
     # 정규화된 성분명(casefold) → 사용자 지정 분량. 배분 때 후보별 역할 키로 옮겨 쓴다.
     user_amounts: dict[str, AmountSpec] = field(default_factory=dict)
+    # 사용자가 제외한 성분(정규화·casefold). 사용자 목록·DB 후보·검토 기본값 어디서도 쓰지 않는다.
+    excluded: list[str] = field(default_factory=list)
 
 
 # 한글/상표 → 영문 canonical (canonical_base 가 다시 통합). 최소 사전(확장 가능).
@@ -82,7 +84,7 @@ def normalize_ingredient(name: str) -> str:
 
 def build_spec(apis, excipients: dict[str, list[str]], *, dosage_form="tablet",
                process="", release_profile="", n_candidates=3, target_total_mg=None,
-               amounts=None) -> FormulationSpec:
+               amounts=None, excluded=None) -> FormulationSpec:
     """구조화 입력으로 스펙 구성(성분명 정규화 포함). 테스트·데모용 결정적 경로.
 
     amounts: {성분명: (mg, pct) | AmountSpec}. 성분명은 역할 리스트와 같은 규칙으로 정규화되므로
@@ -104,11 +106,12 @@ def build_spec(apis, excipients: dict[str, list[str]], *, dosage_form="tablet",
             if api.dose_mg is None:
                 api.dose_mg = amount.mg
             user_amounts.pop(api.name.casefold())
+    excluded_keys = [normalize_ingredient(x).casefold() for x in (excluded or []) if str(x).strip()]
     return FormulationSpec(apis=api_specs, dosage_form=dosage_form,
                            excipient_choices=norm_ex, process=process,
                            release_profile=release_profile,
                            n_candidates=n_candidates, target_total_mg=target_total_mg,
-                           user_amounts=user_amounts)
+                           user_amounts=user_amounts, excluded=excluded_keys)
 
 
 def parse_command_llm(text: str) -> FormulationSpec:

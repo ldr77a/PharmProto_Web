@@ -60,6 +60,7 @@ def build_explanation_payload(spec, candidates, repository=None) -> dict[str, An
         "release_profile": getattr(spec, "release_profile", ""),
         "target_total_mg": getattr(spec, "target_total_mg", None),
         "profile_id": getattr(spec, "profile_id", ""),
+        "excluded_by_user": list(getattr(spec, "excluded", []) or []),   # 사용자가 뺀 성분(해설이 이유를 짚게)
         # 사용자가 고정한 분량 — 해설이 "왜 이 값인가"를 DB 가 아니라 사용자 지정으로 설명하게.
         "user_amounts": {
             name: {"mg": amount.mg, "pct": amount.pct}

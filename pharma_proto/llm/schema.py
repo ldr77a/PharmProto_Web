@@ -67,6 +67,8 @@ class ParsedRequest(BaseModel):
     lubricant: list[IngredientName] = Field(default_factory=list, max_length=20)
     additional_roles: list[ParsedRoleChoice] = Field(default_factory=list, max_length=40)
     amounts: list[ParsedAmount] = Field(default_factory=list, max_length=40)
+    # 사용자가 빼거나 바꾸겠다고 한 성분(예: '포비돈 대신 MCC', '유당을 다른 희석제로'). 어떤 역할에도 쓰지 않는다.
+    excluded: list[IngredientName] = Field(default_factory=list, max_length=20)
     process: str = Field(default="", max_length=500)
     release_profile: str = Field(default="", max_length=200)
     n_candidates: int = Field(default=3, ge=1, le=5)
@@ -92,6 +94,7 @@ class ParsedRequest(BaseModel):
             n_candidates=self.n_candidates,
             target_total_mg=self.target_total_mg,
             amounts={item.ingredient: (item.mg, item.pct) for item in self.amounts},
+            excluded=list(self.excluded),
         )
 
 

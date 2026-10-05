@@ -107,3 +107,26 @@ def test_diluent_list_is_left_alone_when_nothing_true_diluent_remains():
     )
     complete_excipient_choices(spec, FakeKnowledge(primary_roles={"starch": "disintegrant", "pregelatinized starch": "binder"}))
     assert spec.excipient_choices["diluent"] == ["starch", "pregelatinized starch"]
+
+
+def test_excluded_ingredients_are_removed_from_user_lists_and_db_candidates():
+    from generation.candidate_selector import complete_excipient_choices
+    from pharma_proto.llm.schema import ParsedRequest
+    from tests.product.fakes import FakeKnowledge
+
+    parsed = ParsedRequest.model_validate({
+        "apis": [{"name": "Trimetazidine hydrochloride"}], "dosage_form": "tablet",
+        "binder": ["Povidone", "Microcrystalline cellulose PH 102"], "diluent": ["D-mannitol"],
+        "excluded": ["Povidone", "유당"], "process": "direct compression",
+    })
+    spec = parsed.to_domain()
+    assert spec.excluded == ["povidone", "lactose"]                       # 정규화·casefold
+
+    repository = FakeKnowledge(role_candidates={"diluent": ["lactose", "microcrystalline cellulose", "mannitol"],
+                                                "disintegrant": ["croscarmellose sodium"]})
+    spec.excipient_choices.pop("diluent")                                 # 희석제는 DB 에 맡겨 본다
+    complete_excipient_choices(spec, repository)
+
+    assert spec.excipient_choices["binder"] == ["microcrystalline cellulose"]   # 포비돈 제거
+    assert "lactose" not in spec.excipient_choices["diluent"]                   # DB 후보에서도 제외
+    assert spec.excipient_choices["diluent"][0] == "microcrystalline cellulose"
