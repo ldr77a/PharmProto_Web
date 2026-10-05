@@ -50,30 +50,30 @@
   color: var(--text);
   font-feature-settings: "tnum" 0;
 }
-/* 어두운 변형 — 검은 화면이 아니라 밤의 노트(어두운 갈색·세피아). OS 다크 자동 + 수동 선택.
+/* 어두운 변형 — 순검정이 아닌 중립 회색 계열(종이 질감은 옅게 유지). OS 다크 자동 + 수동 선택.
    같은 값을 두 번 적는 이유: 미디어쿼리와 속성 선택자를 한 규칙으로 묶을 수 없다. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #1b1814; --surface: #25211b; --surface-2: #302a22; --input-bg: #1f1b16;
-    --border: #3d352b; --border-strong: #6d6150; --rule: #4a4236;
-    --text: #ede5d6; --text-muted: #b1a692;
-    --primary: #a9bddd; --primary-hover: #c1d1ea; --on-primary: #141c2a; --primary-soft: #2a3444;
-    --evidence: #8fcaa4; --evidence-soft: #243529;
-    --warn: #e2b96b; --warn-soft: #3b3019;
-    --danger: #e59a96; --danger-soft: #3f2523;
+    --bg: #171819; --surface: #1f2123; --surface-2: #292b2e; --input-bg: #1a1c1e;
+    --border: #34373a; --border-strong: #5d6166; --rule: #3c3f43;
+    --text: #e8e9ea; --text-muted: #a3a6ab;
+    --primary: #a9bddd; --primary-hover: #c1d1ea; --on-primary: #141c2a; --primary-soft: #28313e;
+    --evidence: #8fcaa4; --evidence-soft: #22332a;
+    --warn: #e2b96b; --warn-soft: #3a3120;
+    --danger: #e59a96; --danger-soft: #3d2626;
     --ring: #a9bddd; --shadow: none;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #1b1814; --surface: #25211b; --surface-2: #302a22; --input-bg: #1f1b16;
-  --border: #3d352b; --border-strong: #6d6150; --rule: #4a4236;
-  --text: #ede5d6; --text-muted: #b1a692;
-  --primary: #a9bddd; --primary-hover: #c1d1ea; --on-primary: #141c2a; --primary-soft: #2a3444;
-  --evidence: #8fcaa4; --evidence-soft: #243529;
-  --warn: #e2b96b; --warn-soft: #3b3019;
-  --danger: #e59a96; --danger-soft: #3f2523;
+  --bg: #171819; --surface: #1f2123; --surface-2: #292b2e; --input-bg: #1a1c1e;
+  --border: #34373a; --border-strong: #5d6166; --rule: #3c3f43;
+  --text: #e8e9ea; --text-muted: #a3a6ab;
+  --primary: #a9bddd; --primary-hover: #c1d1ea; --on-primary: #141c2a; --primary-soft: #28313e;
+  --evidence: #8fcaa4; --evidence-soft: #22332a;
+  --warn: #e2b96b; --warn-soft: #3a3120;
+  --danger: #e59a96; --danger-soft: #3d2626;
   --ring: #a9bddd; --shadow: none;
 }
 :root[data-theme="light"] { color-scheme: light; }
